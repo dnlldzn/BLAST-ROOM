@@ -1,7 +1,8 @@
 //---------- 1. Connect to the database (Supabase) ----------
 const SUPABASE_URL = 'https://jdyqyzfdmahqshqbiadx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_xNXIvvcgLuqQQB1uCk6-Ig_4s2HlJv5';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let authMode = 'login';
 
 // === APP STATE ===
 const state = {
@@ -41,9 +42,14 @@ const el = {
   loginScreen: document.getElementById('loginScreen'),
   app: document.getElementById('app'),
   loginForm: document.getElementById('loginForm'),
-  loginRole: document.getElementById('loginRole'),
-  loginIdLabel: document.getElementById('loginIdLabel'),
+  studentIdField: document.getElementById('studentIdField'),
   loginStudentId: document.getElementById('loginStudentId'),
+  loginEmail: document.getElementById('loginEmail'),
+  loginPassword: document.getElementById('loginPassword'),
+  authSubmit: document.getElementById('authSubmit'),
+  authMessage: document.getElementById('authMessage'),
+  authModeToggle: document.getElementById('authModeToggle'),
+  authSwitchPrompt: document.getElementById('authSwitchPrompt'),
   sidebar: document.getElementById('sidebar'),
   mobileMenu: document.getElementById('mobileMenu'),
   pageCrumb: document.getElementById('pageCrumb'),
@@ -444,41 +450,41 @@ function handleAiResponse(userText) {
   }
 }
 
-// === LOGIN / LOGOUT ===
-function updateLoginRole() {
-  const role = el.loginRole.value;
-  const roleTitle = role === 'teacher' ? 'Teacher' : 'Student';
-  el.loginIdLabel.textContent = `${roleTitle} ID`;
-  el.loginStudentId.placeholder = `Enter your ${roleTitle.toLowerCase()} ID`;
+// === LOGIN / SIGN UP / LOGOUT ===
+function setAuthMessage(message, type = '') {
+  el.authMessage.textContent = message;
+  el.authMessage.className = `auth-message${type ? ` ${type}` : ''}`;
 }
 
-function handleLogin(e) {
-  e.preventDefault();
-  const accountId = el.loginStudentId.value.trim();
-  const role = el.loginRole.value;
-  const email = document.getElementById('loginEmail').value.trim();
-  
-  // Save to state
-  state.user = { 
-    accountId: accountId,
-    role: role,
-    email: email 
-  };
-  
-  // Update all UI displays with the selected account
+function setAuthMode(mode) {
+  authMode = mode;
+  const isSignup = mode === 'signup';
+  el.studentIdField.classList.toggle('hidden', !isSignup);
+  el.loginStudentId.required = isSignup;
+  el.loginStudentId.autocomplete = isSignup ? 'username' : 'off';
+  el.loginPassword.autocomplete = isSignup ? 'new-password' : 'current-password';
+  el.loginPassword.minLength = isSignup ? 6 : 0;
+  el.authSubmit.innerHTML = isSignup
+    ? 'Create student account <span>→</span>'
+    : 'Log in to Blastoise Room <span>→</span>';
+  el.authModeToggle.textContent = isSignup ? 'Log in' : 'Create an account';
+  el.authSwitchPrompt.textContent = isSignup ? 'Already have an account?' : 'New student?';
+  setAuthMessage('');
+}
+
+function showAuthenticatedApp(user) {
+  const metadata = user.user_metadata || {};
+  const accountId = metadata.student_id || user.email || 'Student';
+  const role = metadata.role === 'teacher' ? 'Teacher' : 'Student';
+
+  state.user = { accountId, role: role.toLowerCase(), email: user.email };
   el.welcomeName.textContent = accountId;
   el.userNameTop.textContent = accountId;
-  el.userRoleTop.textContent = `${role === 'teacher' ? 'Teacher' : 'Student'} account`;
-  
-  // Generate avatar from first 2 characters of the account ID
-  const initials = accountId.slice(0, 2).toUpperCase();
-  el.userAvatar.textContent = initials;
-  
-  // Show app, hide login
+  el.userRoleTop.textContent = `${role} account`;
+  el.userAvatar.textContent = accountId.slice(0, 2).toUpperCase();
   el.loginScreen.classList.add('hidden');
   el.app.classList.remove('hidden');
-  
-  // Load all dashboard data
+
   renderStats();
   renderDashboardCourses();
   renderDeadlines();
@@ -486,22 +492,86 @@ function handleLogin(e) {
   renderAssignments();
   renderGrades();
   renderNotifications();
-  
   showToast(`Welcome, ${accountId}!`);
 }
 
-function handleLogout() {
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = el.loginEmail.value.trim();
+  const password = el.loginPassword.value;
+  const studentId = el.loginStudentId.value.trim();
+  if (authMode === 'signup' && !studentId) {
+    setAuthMessage('Enter your student ID.', 'error');
+    el.loginStudentId.focus();
+    return;
+  }
+
+  el.authSubmit.disabled = true;
+  el.authModeToggle.disabled = true;
+  setAuthMessage(authMode === 'signup' ? 'Creating your account…' : 'Signing in…');
+
+  try {
+    if (authMode === 'signup') {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            student_id: studentId,
+            role: 'student'
+          }
+        }
+      });
+      if (error) throw error;
+
+      if (data.session) {
+        showAuthenticatedApp(data.user);
+      } else {
+        setAuthMode('login');
+        el.loginEmail.value = email;
+        setAuthMessage(
+          'Account created. Check your email for a confirmation link, then log in.',
+          'success'
+        );
+      }
+      return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+    if (error) throw error;
+    showAuthenticatedApp(data.user);
+  } catch (error) {
+    setAuthMessage(error.message || 'Authentication failed. Please try again.', 'error');
+  } finally {
+    el.authSubmit.disabled = false;
+    el.authModeToggle.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    showToast(`Could not log out: ${error.message || 'Please try again.'}`);
+    return;
+  }
   state.user = null;
   el.loginScreen.classList.remove('hidden');
   el.app.classList.add('hidden');
   showView('dashboard');
   el.loginForm.reset();
-  updateLoginRole();
+  setAuthMode('login');
 }
 
 // === EVENT BINDINGS ===
-el.loginRole.addEventListener('change', updateLoginRole);
 el.loginForm.addEventListener('submit', handleLogin);
+el.authModeToggle.addEventListener('click', () => {
+  setAuthMode(authMode === 'login' ? 'signup' : 'login');
+});
 el.logoutBtn.addEventListener('click', handleLogout);
 el.mobileMenu.addEventListener('click', () => el.sidebar.classList.toggle('open'));
 el.backToCourses.addEventListener('click', () => showView('courses'));
@@ -557,6 +627,17 @@ el.quickPrompts.forEach(btn => {
 });
 
 // === INIT ===
-document.addEventListener('DOMContentLoaded', () => {
-  // Ready — login triggers all renders
-});
+setAuthMode('login');
+async function restoreSession() {
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (data.session) showAuthenticatedApp(data.session.user);
+  } catch (error) {
+    setAuthMessage(
+      `Could not restore your session: ${error.message || 'Please try again.'}`,
+      'error'
+    );
+  }
+}
+restoreSession();

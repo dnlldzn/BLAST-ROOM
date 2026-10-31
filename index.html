@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blastoise Room Learning Management System</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -18,25 +19,26 @@
         Your courses, Modules, assignments, and grades in one place.
       </p>
       <form id="loginForm">
-        <label for="loginRole">I am a</label>
-        <select id="loginRole" name="loginRole">
-          <option value="student">Student</option>
-          <option value="teacher">Teacher</option>
-        </select>
-        <label id="loginIdLabel" for="loginStudentId">Student ID</label>
-        <input id="loginStudentId" name="loginStudentId"
-          placeholder="Enter your student ID" required>
+        <div id="studentIdField" class="hidden">
+          <label for="loginStudentId">Student ID</label>
+          <input id="loginStudentId" name="loginStudentId"
+            autocomplete="username" placeholder="Enter your student ID">
+        </div>
         <label for="loginEmail">Email address</label>
         <input id="loginEmail" name="loginEmail" type="email"
           autocomplete="email" placeholder="Email@Blastoiseroom.com" required>
         <label for="loginPassword">Password</label>
         <input id="loginPassword" name="loginPassword" type="password"
           placeholder="Enter your password" required>
-        <button class="primary-btn full-width" type="submit">
+        <button id="authSubmit" class="primary-btn full-width" type="submit">
           Log in to Blastoise Room <span>→</span>
         </button>
       </form>
-
+      <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+      <p class="auth-switch">
+        <span id="authSwitchPrompt">New student?</span>
+        <button id="authModeToggle" class="text-button" type="button">Create an account</button>
+      </p>
     </section>
   </main>
   <!-- MAIN LMS APPLICATION -->

@@ -158,6 +158,36 @@ textarea:focus-visible {
   margin: 18px 0 0;
 }
 
+.auth-message {
+  min-height: 0;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-message:empty {
+  display: none;
+}
+
+.auth-message.error {
+  color: #b42318;
+}
+
+.auth-message.success {
+  color: #13795b;
+}
+
+.auth-switch {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* BUTTONS */
 
 .primary-btn,
