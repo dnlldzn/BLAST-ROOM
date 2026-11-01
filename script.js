@@ -64,7 +64,8 @@ const el = {
     assignments: document.getElementById('view-assignments'),
     grades: document.getElementById('view-grades'),
     notifications: document.getElementById('view-notifications'),
-    courseDetail: document.getElementById('view-course-detail')
+    courseDetail: document.getElementById('view-course-detail'),
+    admin: document.getElementById('view-admin')
   },
   navItems: document.querySelectorAll('.nav-item[data-view]'),
   statCourses: document.getElementById('statCourses'),
@@ -107,6 +108,7 @@ const el = {
 
 // === UTILITY ===
 function showView(viewName) {
+  if (viewName === 'admin' && !state.user?.isAdmin) return;
   Object.values(el.views).forEach(v => v.classList.add('hidden'));
   el.views[viewName].classList.remove('hidden');
   el.navItems.forEach(n => n.classList.remove('active'));
@@ -114,6 +116,7 @@ function showView(viewName) {
   el.pageCrumb.textContent = viewName === 'courseDetail' ? 'Course Details' :
     viewName.charAt(0).toUpperCase() + viewName.slice(1);
   state.activeView = viewName;
+  if (viewName === 'admin') loadAdmin();
   if (window.innerWidth < 900) el.sidebar.classList.remove('open');
 }
 
@@ -227,6 +230,8 @@ function openCourseDetail(courseId) {
       <div class="progress-bar" style="margin:0.5rem 0 1rem;"><div class="progress-fill" style="width:${c.progress}%"></div></div>
       <p><strong>Modules:</strong> ${c.modules.completed} of ${c.modules.total} completed</p>
     </div>
+    <h3 style="font-weight:600; margin-bottom:0.8rem;">Modules</h3>
+    <div id="courseModules" class="muted" style="display:grid; gap:0.8rem; margin-bottom:1.5rem;">Loading…</div>
     <h3 style="font-weight:600; margin-bottom:0.8rem;">Course Assignments</h3>
     <div style="display:grid; gap:0.8rem;">
       ${courseAssignments.length ? courseAssignments.map(a => `
@@ -247,6 +252,7 @@ function openCourseDetail(courseId) {
     btn.addEventListener('click', () => openAssignmentDialog(btn.dataset.assignment));
   });
   showView('courseDetail');
+  loadCourseModules(courseId);
 }
 
 function renderAssignments(filter = 'all') {
@@ -472,12 +478,16 @@ function setAuthMode(mode) {
   setAuthMessage('');
 }
 
-function showAuthenticatedApp(user) {
-  const metadata = user.user_metadata || {};
-  const accountId = metadata.student_id || user.email || 'Student';
-  const role = metadata.role === 'teacher' ? 'Teacher' : 'Student';
+async function showAuthenticatedApp(user) {
+  // Role comes from the database (profiles table), never from the browser.
+  const { data: profile } = await supabaseClient
+    .from('profiles').select('role, student_id').eq('id', user.id).maybeSingle();
+  const isAdmin = profile?.role === 'admin';
+  const accountId = profile?.student_id || user.email || 'Student';
+  const role = isAdmin ? 'Admin' : 'Student';
 
-  state.user = { accountId, role: role.toLowerCase(), email: user.email };
+  state.user = { accountId, role: role.toLowerCase(), email: user.email, isAdmin };
+  document.querySelectorAll('.admin-only').forEach(n => n.classList.toggle('hidden', !isAdmin));
   el.welcomeName.textContent = accountId;
   el.userNameTop.textContent = accountId;
   el.userRoleTop.textContent = `${role} account`;
@@ -517,8 +527,7 @@ async function handleLogin(e) {
         password,
         options: {
           data: {
-            student_id: studentId,
-            role: 'student'
+            student_id: studentId
           }
         }
       });
@@ -593,11 +602,14 @@ el.markAllRead.addEventListener('click', () => {
 
 el.closeAssignmentDialog.addEventListener('click', () => el.assignmentDialog.close());
 el.cancelAssignment.addEventListener('click', () => el.assignmentDialog.close());
-el.assignmentForm.addEventListener('submit', (e) => {
+el.assignmentForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = el.assignmentDialog.dataset.id;
   const a = state.assignments.find(x => x.id === id);
   if (a) {
+    const { error } = await supabaseClient.from('submissions')
+      .insert({ assignment_id: id, answer: el.assignmentAnswer.value });
+    if (error) { showToast(`Could not submit: ${error.message}`); return; }
     a.status = 'submitted';
     renderAssignments(el.assignmentFilter.value);
     renderDeadlines();
@@ -641,3 +653,99 @@ async function restoreSession() {
   }
 }
 restoreSession();
+// === ADMIN DASHBOARD + MODULE MANAGEMENT ===
+// The checks below only hide things. Real protection is the row-level rules in setup.sql.
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s ?? '';
+  return d.innerHTML;
+}
+
+async function loadCourseModules(courseId) {
+  const box = document.getElementById('courseModules');
+  const { data, error } = await supabaseClient.from('modules')
+    .select('title, content').eq('course_id', courseId).order('created_at');
+  if (error) { box.textContent = 'Could not load modules.'; return; }
+  box.innerHTML = data.length ? data.map(m => `
+    <div class="module-item" style="background:white; border-radius:8px; border:none; box-shadow:var(--shadow);">
+      <div><strong>${esc(m.title)}</strong><p class="muted">${esc(m.content)}</p></div>
+    </div>`).join('') : 'No modules yet.';
+}
+
+async function loadAdmin() {
+  if (!state.user?.isAdmin) return;
+  const countOf = (table, filter) => {
+    const q = supabaseClient.from(table).select('*', { count: 'exact', head: true });
+    return filter ? filter(q) : q;
+  };
+  const [stu, mod, sub, rows] = await Promise.all([
+    countOf('profiles', q => q.eq('role', 'student')),
+    countOf('modules'),
+    countOf('submissions'),
+    supabaseClient.from('submissions').select('assignment_id')
+  ]);
+  document.getElementById('adminStudents').textContent = stu.count ?? '–';
+  document.getElementById('adminModuleCount').textContent = mod.count ?? '–';
+  document.getElementById('adminSubmissions').textContent = sub.count ?? '–';
+
+  const per = {};
+  (rows.data || []).forEach(r => { per[r.assignment_id] = (per[r.assignment_id] || 0) + 1; });
+  document.getElementById('adminSubmissionStats').innerHTML = state.assignments.map(a => {
+    const n = per[a.id] || 0;
+    const pct = stu.count ? Math.min(100, Math.round(n / stu.count * 100)) : 0;
+    return `<div class="deadline-item"><strong>${esc(a.title)}</strong>
+      <p class="muted">${n} of ${stu.count ?? 0} students (${pct}%)</p>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+  }).join('');
+
+  const select = document.getElementById('moduleCourse');
+  if (!select.options.length) {
+    select.innerHTML = state.courses.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  loadAdminModules();
+}
+
+async function loadAdminModules() {
+  const list = document.getElementById('adminModules');
+  const { data, error } = await supabaseClient.from('modules')
+    .select('*').order('created_at', { ascending: false });
+  if (error) { list.textContent = error.message; return; }
+  const byId = Object.fromEntries(data.map(m => [m.id, m]));
+  list.innerHTML = data.map(m => `
+    <div class="module-item">
+      <div><strong>${esc(m.title)}</strong><p class="muted">${esc(getCourseName(m.course_id))}</p></div>
+      <span class="module-actions">
+        <button class="text-button" data-edit="${m.id}">Edit</button>
+        <button class="text-button" data-del="${m.id}">Delete</button>
+      </span>
+    </div>`).join('') || '<p class="muted">No modules yet.</p>';
+
+  list.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => {
+    const title = prompt('Module title', byId[b.dataset.edit].title);
+    if (!title || !title.trim()) return;
+    const { error } = await supabaseClient.from('modules')
+      .update({ title: title.trim() }).eq('id', b.dataset.edit);
+    if (error) { showToast(error.message); return; }
+    loadAdminModules();
+  }));
+  list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this module?')) return;
+    const { error } = await supabaseClient.from('modules').delete().eq('id', b.dataset.del);
+    if (error) { showToast(error.message); return; }
+    showToast('Module deleted');
+    loadAdmin();
+  }));
+}
+
+document.getElementById('moduleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { error } = await supabaseClient.from('modules').insert({
+    course_id: document.getElementById('moduleCourse').value,
+    title: document.getElementById('moduleTitle').value.trim(),
+    content: document.getElementById('moduleContent').value.trim()
+  });
+  if (error) { showToast(`Could not add module: ${error.message}`); return; }
+  e.target.reset();
+  showToast('Module added');
+  loadAdmin();
+});
