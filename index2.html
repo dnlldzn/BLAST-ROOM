@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blastoise Room Learning Management System</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <!-- LOGIN SCREEN -->
+  <main id="loginScreen" class="login-screen">
+    <section class="login-card">
+      <div class="brand-mark">BR</div>
+      <p class="eyebrow">Blastoise Room</p>
+      <h1>Welcome to Blastoise Room</h1>
+      <p class="muted">
+        Your courses, Modules, assignments, and grades in one place.
+      </p>
+      <form id="loginForm">
+        <div id="studentIdField" class="hidden">
+          <label for="loginStudentId">Student ID</label>
+          <input id="loginStudentId" name="loginStudentId"
+            autocomplete="username" placeholder="Enter your student ID">
+        </div>
+        <label for="loginEmail">Email address</label>
+        <input id="loginEmail" name="loginEmail" type="email"
+          autocomplete="email" placeholder="Email@Blastoiseroom.com" required>
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="loginPassword" type="password"
+          placeholder="Enter your password" required>
+        <button id="authSubmit" class="primary-btn full-width" type="submit">
+          Log in to Blastoise Room <span>→</span>
+        </button>
+      </form>
+      <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+      <p class="auth-switch">
+        <span id="authSwitchPrompt">New student?</span>
+        <button id="authModeToggle" class="text-button" type="button">Create an account</button>
+      </p>
+    </section>
+  </main>
+  <!-- MAIN LMS APPLICATION -->
+  <div id="app" class="app-shell hidden">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#" data-view="dashboard">
+        <span class="brand-mark small">BR</span>
+        <span>Blastoise Room</span>
+      </a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard">
+          <span>▦</span> Dashboard
+        </button>
+        <button class="nav-item" data-view="courses">
+          <span>▤</span> My Courses
+        </button>
+        <button class="nav-item" data-view="assignments">
+          <span>☑</span> Assignments
+          <span class="nav-count" id="assignmentCount">3</span>
+        </button>
+        <button class="nav-item" data-view="grades">
+          <span>▥</span> Grades
+        </button>
+        <button class="nav-item" data-view="notifications">
+          <span>♧</span> Notifications
+          <span class="notification-dot"></span>
+        </button>
+        <button class="nav-item admin-only hidden" data-view="admin">
+          <span>⚙</span> Admin
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card">
+          <div class="help-icon">✦</div>
+          <strong>Need a hand?</strong>
+          <p>Ask your AI learning assistant anytime.</p>
+          <button id="sidebarAskAi" class="text-button">
+            Ask AI assistant ↗
+          </button>
+        </div>
+        <button id="logoutBtn" class="nav-item logout">
+          <span>⇥</span> Log out
+        </button>
+      </div>
+    </aside>
+    <!-- MAIN CONTENT AREA -->
+    <div class="main-area">
+      <header class="topbar">
+        <button id="mobileMenu" class="icon-btn mobile-menu"
+          aria-label="Open menu">☰</button>
+        <div class="breadcrumb">
+          Workspace <span>/</span>
+          <strong id="pageCrumb">Dashboard</strong>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" data-view="notifications"
+            aria-label="Notifications">
+            ♧<i class="tiny-dot"></i>
+          </button>
+          <div class="user-chip">
+            <div class="avatar" id="userAvatar">ST</div>
+            <div class="user-info">
+              <strong id="userNameTop">Student</strong>
+              <span id="userRoleTop">Student account</span>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="content">
+        <!-- DASHBOARD -->
+        <section id="view-dashboard" class="view">
+          <div class="welcome-row">
+            <div>
+              <p class="eyebrow">Saturday, OCTOBER 17</p>
+              <h1>
+                Good to see you,
+                <span id="welcomeName">Students</span>
+                <span class="wave">✦</span>
+              </h1>
+              <p class="muted">
+                Here's what's happening with your learning today.
+              </p>
+            </div>
+            <button class="primary-btn" data-view="courses">
+              Explore courses <span>→</span>
+            </button>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-top">
+                <span>Enrolled courses</span>
+                <span class="stat-icon purple">▤</span>
+              </div>
+              <strong id="statCourses">4</strong>
+              <small><span class="positive">●</span> Your active learning space</small>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top">
+                <span>Pending assignments</span>
+                <span class="stat-icon orange">☑</span>
+              </div>
+              <strong id="statPending">3</strong>
+              <small>Keep an eye on due dates</small>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top">
+                <span>Average grade</span>
+                <span class="stat-icon green">↗</span>
+              </div>
+              <strong id="statAverage">88.5%</strong>
+              <small><span class="positive">●</span> Across graded work</small>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top">
+                <span>Modules completed</span>
+                <span class="stat-icon blue">✓</span>
+              </div>
+              <strong id="statModules">5/12</strong>
+              <small>You're making progress</small>
+            </article>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel course-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Continue learning</h2>
+                  <p class="muted">Pick up where you left off</p>
+                </div>
+                <button class="text-button" data-view="courses">
+                  View all →
+                </button>
+              </div>
+              <div id="dashboardCourses" class="course-list"></div>
+            </section>
+            <section class="panel deadline-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Upcoming deadlines</h2>
+                  <p class="muted">Plan your study time</p>
+                </div>
+                <button class="text-button" data-view="assignments">
+                  See all →
+                </button>
+              </div>
+              <div id="dashboardDeadlines" class="deadline-list"></div>
+            </section>
+          </div>
+          <section class="ai-banner">
+            <div class="ai-orb">✦</div>
+            <div>
+              <p class="eyebrow">YOUR STUDY PARTNER</p>
+              <h2>Meet your AI learning assistant</h2>
+              <p>
+                Get explanations, study tips, and help understanding
+                your course materials.
+              </p>
+            </div>
+            <button class="light-btn" id="openAiFromBanner">
+              Chat with AI <span>→</span>
+            </button>
+          </section>
+        </section>
+        <!-- COURSES -->
+        <section id="view-courses" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">YOUR CLASSROOM</p>
+              <h1>My Courses</h1>
+              <p class="muted">
+                Explore course content and keep your learning on track.
+              </p>
+            </div>
+            <div class="search-wrap">
+              <span>⌕</span>
+              <input id="courseSearch" placeholder="Search courses..."
+                aria-label="Search courses">
+            </div>
+          </div>
+          <div id="coursesGrid" class="courses-grid"></div>
+        </section>
+        <!-- ASSIGNMENTS -->
+        <section id="view-assignments" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">STAY ON TRACK</p>
+              <h1>Assignments</h1>
+              <p class="muted">
+                Review your tasks and submit your work.
+              </p>
+            </div>
+            <select id="assignmentFilter" class="select-control"
+              aria-label="Filter assignments">
+              <option value="all">All assignments</option>
+              <option value="pending">Pending</option>
+              <option value="submitted">Submitted</option>
+            </select>
+          </div>
+          <div class="panel table-panel">
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Assignment</th>
+                    <th>Course</th>
+                    <th>Due date</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="assignmentsTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <!-- GRADES -->
+        <section id="view-grades" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ACADEMIC PERFORMANCE</p>
+              <h1>Grades</h1>
+              <p class="muted">
+                A clear view of your scores and course performance.
+              </p>
+            </div>
+          </div>
+          <div class="grade-summary">
+            <div class="grade-summary-main">
+              <span>Overall average</span>
+              <strong id="gradeAverage">88.5%</strong>
+              <p>
+                Based on your graded assignments and quizzes.
+              </p>
+            </div>
+            <div class="grade-ring" id="gradeRing">
+              <span id="gradeLetter">B+</span>
+              <small>Current standing</small>
+            </div>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Course gradebook</h2>
+                <p class="muted">
+                </p>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Course</th>
+                    <th>Instructor</th>
+                    <th>Completed work</th>
+                    <th>Average</th>
+                    <th>Standing</th>
+                  </tr>
+                </thead>
+                <tbody id="gradesTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="fine-print">
+            Grades shown here are sample data for demonstration only.
+          </p>
+        </section>
+        <!-- NOTIFICATIONS -->
+        <section id="view-notifications" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">WHAT'S NEW</p>
+              <h1>Notifications</h1>
+              <p class="muted">
+                Updates and reminders for your learning.
+              </p>
+            </div>
+            <button class="secondary-btn" id="markAllRead">
+              Mark all as read
+            </button>
+          </div>
+          <div id="notificationsList" class="panel notifications-list"></div>
+        </section>
+        <!-- ADMIN (only shown to admins) -->
+        <section id="view-admin" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ADMIN ONLY</p>
+              <h1>Admin Dashboard</h1>
+              <p class="muted">Statistics and module management.</p>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card"><div class="stat-top"><span>Students</span></div><strong id="adminStudents">–</strong></article>
+            <article class="stat-card"><div class="stat-top"><span>Modules</span></div><strong id="adminModuleCount">–</strong></article>
+            <article class="stat-card"><div class="stat-top"><span>Submissions</span></div><strong id="adminSubmissions">–</strong></article>
+          </div>
+          <section class="panel">
+            <h2>Submissions by assignment</h2>
+            <div id="adminSubmissionStats"></div>
+          </section>
+          <section class="panel">
+            <h2>Manage modules</h2>
+            <form id="moduleForm" class="module-form">
+              <select id="moduleCourse" aria-label="Course"></select>
+              <input id="moduleTitle" placeholder="Module title" required>
+              <textarea id="moduleContent" rows="3" placeholder="Module content or notes"></textarea>
+              <button class="primary-btn" type="submit">Add module</button>
+            </form>
+            <div id="adminModules"></div>
+          </section>
+        </section>
+        <!-- COURSE DETAILS AND MODULES -->
+        <section id="view-course-detail" class="view hidden">
+          <button class="back-button" id="backToCourses">
+            ← Back to courses
+          </button>
+          <div id="courseDetailContent"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <!-- AI ASSISTANT CHAT -->
+  <div id="aiWidget" class="ai-widget hidden"
+    aria-label="AI learning assistant">
+    <div class="ai-header">
+      <div class="ai-header-icon">✦</div>
+      <div>
+        <strong>Blastoise Tutor</strong>
+        <span><i class="online-dot"></i> Course material tutor</span>
+      </div>
+      <button id="closeAi" class="icon-btn close-ai"
+        aria-label="Close assistant">×</button>
+    </div>
+    <div id="aiMessages" class="ai-messages">
+      <div class="chat-message assistant">
+        <div class="message-avatar">✦</div>
+        <div class="message-bubble">
+          <strong>Hi there! 👋</strong>
+          <p>
+            Ask a question about your courses. I'll search the saved
+            course materials and show you where the answer came from.
+          </p>
+        </div>
+      </div>
+    </div>
+    <label class="sr-only" for="aiCourseFilter">Search within a course</label>
+    <select id="aiCourseFilter" class="ai-course-filter"
+      aria-label="Search within a course">
+      <option value="all">All courses</option>
+    </select>
+    <div class="quick-prompts">
+      <button data-prompt="How do I filter and sort SQL results?">
+        SQL filters
+      </button>
+      <button data-prompt="What is the Project Dream House assignment about?">
+        Dream House
+      </button>
+      <button data-prompt="What is the engineering project essay about?">
+        Engineering essay
+      </button>
+    </div>
+    <form id="aiForm" class="ai-input-row">
+      <input id="aiInput" placeholder="Ask about your course materials..."
+        autocomplete="off" aria-label="Ask AI assistant" required>
+      <button type="submit" aria-label="Send message">↑</button>
+    </form>
+    <div class="ai-disclaimer">
+      Answers use saved course materials in this browser. Connect a backend
+      to use a shared LMS database.
+    </div>
+  </div>
+  <!-- NOTIFICATION TOAST -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!-- ASSIGNMENT SUBMISSION DIALOG -->
+  <dialog id="assignmentDialog" class="assignment-dialog">
+    <form method="dialog" id="assignmentForm">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">ASSIGNMENT DETAILS</p>
+          <h2 id="dialogTitle">Submit assignment</h2>
+        </div>
+        <button type="button" id="closeAssignmentDialog"
+          class="icon-btn" aria-label="Close">×</button>
+      </div>
+      <p id="dialogDescription" class="muted"></p>
+      <label for="assignmentAnswer">
+        Your answer / submission notes
+      </label>
+      <textarea id="assignmentAnswer" rows="6"
+        placeholder="Type your answer or a note about your submission..."
+        required></textarea>
+      <div class="dialog-actions">
+        <button type="button" class="secondary-btn" id="cancelAssignment">
+          Cancel
+        </button>
+        <button type="submit" class="primary-btn">
+          Submit assignment →
+        </button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
