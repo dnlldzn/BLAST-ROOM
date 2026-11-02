@@ -121,24 +121,31 @@ const el = {
 
 // === UTILITY ===
 function showView(viewName) {
-  if (viewName === 'admin' && !state.user?.isStaff) return;
-  Object.values(el.views).forEach(v => v.classList.add('hidden'));
-  if (el.views) {
-    Object.values(el.views).forEach(v => v?.classList.add('hidden'));
+    if (viewName === 'admin' && !state.user?.isStaff) return;
+    
+    if (el.views) {
+        Object.values(el.views).forEach(v => v?.classList.add('hidden'));
+        if (el.views[viewName]) {
+            el.views[viewName].classList.remove('hidden');
+        }
+    }
+    
+    if (el.navItems) {
+        el.navItems.forEach(n => n?.classList.remove('active'));
+    }
+    
+    document.querySelectorAll(`[data-view="${viewName}"]`).forEach(n => n?.classList.add('active'));
+    
+    if (el.pageCrumb) {
+        el.pageCrumb.textContent = viewName === 'courseDetail' ? 'Course Details' : viewName.charAt(0).toUpperCase() + viewName.slice(1);
+    }
+    
+    state.activeView = viewName;
+    if (viewName === 'admin') loadAdmin();
+    if (window.innerWidth < 900 && el.sidebar) {
+        el.sidebar.classList.remove('open');
+    }
 }
-if (el.navItems) {
-    el.navItems.forEach(n => n?.classList.remove('active'));
-}
-  el.views[viewName].classList.remove('hidden');
-  el.navItems.forEach(n => n.classList.remove('active'));
-  document.querySelectorAll(`[data-view="${viewName}"]`).forEach(n => n.classList.add('active'));
-  el.pageCrumb.textContent = viewName === 'courseDetail' ? 'Course Details' :
-    viewName.charAt(0).toUpperCase() + viewName.slice(1);
-  state.activeView = viewName;
-  if (viewName === 'admin') loadAdmin();
- if (window.innerWidth < 900 && el.sidebar) el.sidebar.classList.remove('open');
-}
-
 function showToast(msg) {
   el.toast.textContent = msg;
   el.toast.classList.add('show');
