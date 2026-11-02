@@ -550,7 +550,8 @@ function setAuthMode(mode) {
 function showAuthenticatedApp(user) {
   const metadata = user.user_metadata || {};
   const accountId = metadata.student_id || user.email || 'Student';
-  const role = metadata.role === 'teacher' ? 'Teacher' : 'Student';
+  const isTeacher = user.app_metadata?.role === 'teacher' || metadata.role === 'teacher';
+  const role = isTeacher ? 'Teacher' : 'Student';
 
   state.user = { accountId, role: role.toLowerCase(), email: user.email };
   el.welcomeName.textContent = accountId;
@@ -558,7 +559,7 @@ function showAuthenticatedApp(user) {
   el.userRoleTop.textContent = `${role} account`;
   el.userAvatar.textContent = accountId.slice(0, 2).toUpperCase();
   el.loginRole.value = state.user.role;
-  el.teacherToolsNav.classList.toggle('hidden', !isTeacher);
+  el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
   el.loginScreen.classList.add('hidden');
   el.app.classList.remove('hidden');
 
@@ -574,14 +575,18 @@ function showAuthenticatedApp(user) {
 }
 
 function updatePostKindFields() {
+  if (!el.postKind) return;
+
   const isActivity = el.postKind.value === 'activity';
-  el.postCourseField.classList.toggle('hidden', !isActivity);
-  el.postDueDateField.classList.toggle('hidden', !isActivity);
-  el.postCourse.required = false;
-  el.postDueDate.required = isActivity;
+  el.postCourseField?.classList.toggle('hidden', !isActivity);
+  el.postDueDateField?.classList.toggle('hidden', !isActivity);
+  if (el.postCourse) el.postCourse.required = false;
+  if (el.postDueDate) el.postDueDate.required = isActivity;
 }
 
 function renderTeacherPosts() {
+  if (!el.teacherPostsList) return;
+
   if (!state.classPosts.length) {
     el.teacherPostsList.innerHTML = '<p class="muted">No class posts have been published yet.</p>';
     return;
@@ -675,6 +680,8 @@ async function publishClassPost(event) {
 }
 
 function setTeacherPostMessage(message, type = '') {
+  if (!el.teacherPostMessage) return;
+
   el.teacherPostMessage.textContent = message;
   el.teacherPostMessage.className = `auth-message${type ? ` ${type}` : ''}`;
 }
@@ -753,7 +760,7 @@ async function handleLogout() {
   }
   state.user = null;
   state.classPosts = [];
-  el.teacherToolsNav.classList.add('hidden');
+  el.teacherToolsNav?.classList.add('hidden');
   el.loginScreen.classList.remove('hidden');
   el.app.classList.add('hidden');
   showView('dashboard');
@@ -768,8 +775,8 @@ el.authModeToggle.addEventListener('click', () => {
   setAuthMode(authMode === 'login' ? 'signup' : 'login');
 });
 el.loginRole.addEventListener('change', () => setAuthMode('login'));
-el.postKind.addEventListener('change', updatePostKindFields);
-el.teacherPostForm.addEventListener('submit', publishClassPost);
+el.postKind?.addEventListener('change', updatePostKindFields);
+el.teacherPostForm?.addEventListener('submit', publishClassPost);
 el.logoutBtn.addEventListener('click', handleLogout);
 el.mobileMenu.addEventListener('click', () => el.sidebar.classList.toggle('open'));
 el.backToCourses.addEventListener('click', () => showView('courses'));
@@ -845,7 +852,7 @@ state.courses.forEach(course => {
   const option = document.createElement('option');
   option.value = course.id;
   option.textContent = course.name;
-  el.postCourse.appendChild(option);
+  el.postCourse?.appendChild(option);
 });
 updatePostKindFields();
 restoreSession();
