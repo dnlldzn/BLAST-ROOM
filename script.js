@@ -640,9 +640,14 @@ async function fetchRole(userId) {
 
 async function showAuthenticatedApp(user, knownRole) {
   const metadata = user.user_metadata || {};
+  const resolvedRole = (knownRole || user.app_metadata?.role || metadata.role || 'student').toLowerCase();
+  const isStaff = ['admin', 'teacher'].includes(resolvedRole);
   const accountId = metadata.student_id || user.email || 'Student';
-  const isTeacher = user.app_metadata?.role === 'teacher' || metadata.role === 'teacher';
-  const role = isTeacher ? 'Teacher' : 'Student';
+  const roleLabel = resolvedRole === 'admin'
+    ? 'Admin'
+    : resolvedRole === 'teacher'
+      ? 'Teacher'
+      : 'Student';
 
   state.user = {
     id: user.id,
@@ -650,19 +655,20 @@ async function showAuthenticatedApp(user, knownRole) {
     fullName: metadata.full_name || metadata.name || '',
     studentId: metadata.student_id || '',
     userMetadata: metadata,
-    role: role.toLowerCase(),
+    role: resolvedRole,
+    isStaff,
     email: user.email
   };
   const displayName = state.user.fullName || accountId;
   el.welcomeName.textContent = displayName;
   el.userNameTop.textContent = displayName;
-  el.userRoleTop.textContent = `${role} account`;
+  el.userRoleTop.textContent = `${roleLabel} account`;
   el.userAvatar.textContent = displayName.slice(0, 2).toUpperCase();
   el.profileFullName.value = state.user.fullName;
   el.profileStudentId.value = state.user.studentId;
   el.profileEmail.textContent = state.user.email;
   el.loginRole.value = state.user.role;
-  el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
+  el.teacherToolsNav?.classList.toggle('hidden', !isStaff);
   if (el.postCourse) {
     el.postCourse.innerHTML = '<option value="">All courses</option>' +
       state.courses.map(course =>
@@ -1119,6 +1125,7 @@ async function handleProfileSave(e) {
 
   const fullName = el.profileFullName.value.trim();
   const studentId = el.profileStudentId.value.trim();
+  const gradeLevel = document.getElementById('profileGradeLevel')?.value.trim() || '';
   if (!fullName || (state.user.role === 'student' && !studentId)) {
     setAccountMessage(el.profileMessage, 'Complete the required profile fields.', 'error');
     return;
@@ -1126,15 +1133,27 @@ async function handleProfileSave(e) {
 
   const metadata = { ...state.user.userMetadata, full_name: fullName };
   if (state.user.role === 'student') metadata.student_id = studentId;
+  if (gradeLevel) metadata.grade_level = gradeLevel;
 
   el.saveProfileButton.disabled = true;
   setAccountMessage(el.profileMessage, 'Saving your profile…');
   try {
-    const { data, error } = await supabaseClient.auth.updateUser({ data: metadata });
+    const [{ data, error }, profileResult] = await Promise.all([
+      supabaseClient.auth.updateUser({ data: metadata }),
+      supabaseClient.from('profiles').upsert({
+        id: state.user.id,
+        full_name: fullName,
+        student_id: state.user.role === 'student' ? studentId : null,
+        grade_level: gradeLevel || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' })
+    ]);
     if (error) throw error;
+    if (profileResult.error) throw profileResult.error;
 
     state.user.userMetadata = data.user.user_metadata || metadata;
     state.user.fullName = fullName;
+    state.user.gradeLevel = gradeLevel;
     if (state.user.role === 'student') {
       state.user.studentId = studentId;
       state.user.accountId = studentId;
@@ -1479,39 +1498,6 @@ async function loadUserProfile() {
   }
 }
 
-// Function to save profile data when the form is submitted
-async function saveUserProfile(event) {
-  event.preventDefault();
-
-  const fullName = document.getElementById('profileFullName').value;
-  const studentId = document.getElementById('profileStudentId').value;
-  const gradeLevel = document.getElementById('profileGradeLevel').value;
-
-  try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabaseClient
-      .from('profiles')
-      .update({
-        full_name: fullName,
-        student_id: studentId,
-        grade_level: gradeLevel,
-        updated_at: new Date()
-      })
-      .eq('id', user.id);
-
-    if (error) throw error;
-
-    alert('Profile updated successfully!');
-  } catch (err) {
-    console.error('Error saving profile:', err.message);
-    alert('Failed to update profile. Please try again.');
-  }
-}
-
-// Attach listener to the form submission
-document.getElementById('profileForm')?.addEventListener('submit', saveUserProfile);
 
 // Load profile when the page content is fully loaded
 window.addEventListener('DOMContentLoaded', loadUserProfile);
