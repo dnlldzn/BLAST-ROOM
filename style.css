@@ -1445,7 +1445,22 @@ tbody tr:last-child td {
   display: flex;
   gap: 14px;
   padding: 20px 22px;
+  width: 100%;
+  border: 0;
   border-bottom: 1px solid #f0f1f6;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.notification-action:hover {
+  background: #f5f8fc;
+}
+
+.notification-action:focus-visible {
+  position: relative;
+  z-index: 1;
 }
 
 .notification-item:last-child {

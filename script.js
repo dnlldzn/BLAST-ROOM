@@ -313,6 +313,13 @@ function getClassPostNotifications() {
       kind: post.kind === 'activity' ? 'New activity' : 'New announcement',
       message: `${post.title}: ${post.content}`,
       time: formatDate(post.created_at),
+      assignmentId: state.user?.role === 'student' && post.kind === 'activity'
+        ? `post-${post.id}`
+        : null,
+      assignmentTitle: state.user?.role === 'student' && post.kind === 'activity'
+        ? post.title
+        : null,
+      classPostId: String(post.id),
       read: state.user?.isStaff ||
         state.readClassPostIds.has(String(post.id))
     }));
@@ -455,13 +462,43 @@ function renderGrades() {
 function renderNotifications() {
   updateNotificationBadge();
   const notifications = [...getClassPostNotifications(), ...state.notifications];
-  el.notificationsList.innerHTML = notifications.map(n => `
-    <div class="notification-item ${!n.read ? 'unread' : ''}" data-id="${n.id}">
+  el.notificationsList.innerHTML = notifications.map(n => {
+    const isAssignment = Boolean(n.assignmentId);
+    const tagName = isAssignment ? 'button' : 'article';
+    const attributes = isAssignment
+      ? `type="button" data-assignment="${escapeHtml(n.assignmentId)}" data-post-id="${escapeHtml(n.classPostId)}" aria-label="Open assignment: ${escapeHtml(n.assignmentTitle)} and submit your work"`
+      : '';
+    return `
+    <${tagName} class="notification-item ${!n.read ? 'unread' : ''}${isAssignment ? ' notification-action' : ''}" ${attributes}>
       ${n.kind ? `<strong>${escapeHtml(n.kind)}</strong>` : ''}
       <p>${escapeHtml(n.message)}</p>
       <small class="muted">${escapeHtml(n.time)}</small>
-    </div>
-  `).join('');
+    </${tagName}>
+  `;
+  }).join('');
+}
+
+async function markClassPostRead(postId) {
+  if (state.user?.role !== 'student' || state.readClassPostIds.has(postId)) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from('class_post_reads')
+      .upsert({
+        user_id: state.user.id,
+        post_id: postId
+      }, {
+        onConflict: 'user_id,post_id',
+        ignoreDuplicates: true
+      });
+    if (error) throw error;
+
+    state.readClassPostIds.add(postId);
+    renderNotifications();
+  } catch (error) {
+    console.error('Unable to save notification read status:', error);
+    showToast(`Could not mark teacher post as read: ${error.message}`);
+  }
 }
 
 // === AI CHAT ===
@@ -1327,6 +1364,23 @@ el.markAllRead.addEventListener('click', async () => {
   state.notifications.forEach(n => n.read = true);
   renderNotifications();
   showToast('All marked as read ✓');
+});
+
+el.notificationsList.addEventListener('click', event => {
+  const button = event.target.closest('button[data-assignment]');
+  if (!button) return;
+
+  const assignmentId = button.dataset.assignment;
+  if (!getAssignments().some(assignment => assignment.id === assignmentId)) {
+    showToast('This assignment is no longer available.');
+    return;
+  }
+
+  showView('assignments');
+  el.assignmentFilter.value = 'all';
+  renderAssignments();
+  openAssignmentDialog(assignmentId);
+  void markClassPostRead(button.dataset.postId);
 });
 
 el.closeAssignmentDialog.addEventListener('click', () => el.assignmentDialog.close());
