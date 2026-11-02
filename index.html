@@ -66,6 +66,10 @@
           <span>☑</span> Assignments
           <span class="nav-count" id="assignmentCount">3</span>
         </button>
+        <button id="teacherToolsNav" class="nav-item hidden"
+          data-view="teacher">
+          <span>✎</span> Teacher tools
+        </button>
         <button class="nav-item" data-view="grades">
           <span>▥</span> Grades
         </button>
@@ -336,6 +340,44 @@
             </button>
           </div>
           <div id="notificationsList" class="panel notifications-list"></div>
+        </section>
+        <!-- TEACHER TOOLS -->
+        <section id="view-teacher" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CLASSROOM UPDATES</p>
+              <h1>Teacher tools</h1>
+              <p class="muted">Publish announcements and activities for your students.</p>
+            </div>
+          </div>
+          <form id="teacherPostForm" class="panel teacher-post-form">
+            <label for="postKind">Post type</label>
+            <select id="postKind" name="kind">
+              <option value="announcement">Announcement</option>
+              <option value="activity">Assignment / activity</option>
+            </select>
+            <label for="postTitle">Title</label>
+            <input id="postTitle" name="title" type="text" maxlength="120" required>
+            <div id="postCourseField" class="hidden">
+              <label for="postCourse">Course</label>
+              <select id="postCourse" name="course"></select>
+            </div>
+            <div id="postDueDateField" class="hidden">
+              <label for="postDueDate">Due date</label>
+              <input id="postDueDate" name="dueDate" type="date">
+            </div>
+            <label for="postContent">Instructions or message</label>
+            <textarea id="postContent" name="content" maxlength="5000" required></textarea>
+            <p id="teacherPostMessage" class="auth-message" role="status"
+              aria-live="polite"></p>
+            <button id="publishPostButton" class="primary-btn" type="submit">
+              Publish post
+            </button>
+          </form>
+          <section class="panel teacher-posts-panel">
+            <h2>Published posts</h2>
+            <div id="teacherPostsList" class="teacher-posts-list"></div>
+          </section>
         </section>
         <!-- COURSE DETAILS AND MODULES -->
         <section id="view-course-detail" class="view hidden">

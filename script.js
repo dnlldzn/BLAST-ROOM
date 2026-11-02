@@ -17,10 +17,10 @@ const state = {
     { id: 'OLMATH', name: 'OLMATH01', instructor: 'Ms. Mary Joyce Luceño', progress: 25, modules: { total: 12, completed: 3 }, color: '#b68b5b' }
   ],
   assignments: [
-    { id: 'a1', title: 'Project Dream House', course: 'AUTOCAD', dueDate: '2026-11-09', status: 'pending', description: 'Build your Dream House using the Requirements in your module.' },
-    { id: 'a2', title: 'SQL Query Practice', course: 'OLIMFBDS', dueDate: '2026-11-11', status: 'pending', description: 'Write 5 SELECT queries filtering and sorting data.' },
-    { id: 'a3', title: 'Multidisciplinary Project Design', course: 'OLCOEPRO', dueDate: '2026-11-16', status: 'pending', description: '300-word essay about engineering.' },
-    { id: 'a4', title: 'Data Management', course: 'OLMATH', dueDate: '2026-10-10', status: 'submitted', description: 'Survey 40 students about their Daily Allowancae.' }
+    { id: 'a1', title: 'Project Dream House', course: 'AUTOCAD', dueDate: '2026-11-05', status: 'pending', description: 'Build your Dream House using the Requirements in your module.' },
+    { id: 'a2', title: 'SQL Query Practice', course: 'OLIMFBDS', dueDate: '2026-10-31', status: 'pending', description: 'Write 5 SELECT queries filtering and sorting data.' },
+    { id: 'a3', title: 'Multidisciplinary Project Design', course: 'OLCOEPRO', dueDate: '2026-11-07', status: 'pending', description: '300-word essay about engineering.' },
+    { id: 'a4', title: 'Data Management', course: 'OLMATH', dueDate: '2026-10-20', status: 'submitted', description: 'Survey 40 students about their Daily Allowancae.' }
   ],
   notifications: [
     { id: 'n1', message: 'New material posted in OLIMFBDS', time: '2 hours ago', read: false },
@@ -100,6 +100,7 @@ const el = {
     assignments: document.getElementById('view-assignments'),
     grades: document.getElementById('view-grades'),
     notifications: document.getElementById('view-notifications'),
+    teacher: document.getElementById('view-teacher'),
     courseDetail: document.getElementById('view-course-detail'),
     profile: document.getElementById('view-profile'),
     settings: document.getElementById('view-settings')
@@ -151,6 +152,7 @@ const el = {
 function showView(viewName) {
     closeAccountMenu();
     if (viewName === 'admin' && !state.user?.isStaff) return;
+    if (viewName === 'teacher' && state.user?.role !== 'teacher') return;
     
     if (el.views) {
         Object.values(el.views).forEach(v => v?.classList.add('hidden'));
@@ -245,22 +247,33 @@ function getAssignments() {
   ];
 }
 
+function parseCalendarDate(value) {
+  const dateOnly = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(value);
+}
+
+function getLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getCalendarDayNumber(date) {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
+}
+
 function formatDate(d) {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(d)
-    ? new Date(`${d}T00:00:00`)
-    : new Date(d);
+  const date = parseCalendarDate(d);
   const opts = { month: 'short', day: 'numeric' };
   return date.toLocaleDateString('en-US', opts);
 }
 
 function getDaysRemaining(d) {
-  const due = /^\d{4}-\d{2}-\d{2}$/.test(d)
-    ? new Date(`${d}T00:00:00`)
-    : new Date(d);
-  const today = new Date();
-  due.setHours(0, 0, 0, 0);
-  today.setHours(0, 0, 0, 0);
-  return Math.round((due - today) / (1000 * 60 * 60 * 24));
+  const due = parseCalendarDate(d);
+  return getCalendarDayNumber(due) - getCalendarDayNumber(new Date());
 }
 
 function renderDashboardDate() {
@@ -323,7 +336,8 @@ function renderDashboardCourses() {
 function renderDeadlines() {
   const upcoming = getAssignments()
     .filter(a => a.status === 'pending')
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    .sort((a, b) => getCalendarDayNumber(parseCalendarDate(a.dueDate)) -
+      getCalendarDayNumber(parseCalendarDate(b.dueDate)));
   el.dashboardDeadlines.innerHTML = upcoming.map(a => {
     const days = getDaysRemaining(a.dueDate);
     const cls = days <= 3 ? 'urgent' : 'normal';
@@ -663,6 +677,12 @@ function showAuthenticatedApp(user) {
   el.profileEmail.textContent = state.user.email;
   el.loginRole.value = state.user.role;
   el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
+  if (el.postCourse) {
+    el.postCourse.innerHTML = '<option value="">All courses</option>' +
+      state.courses.map(course =>
+        `<option value="${escapeHtml(course.id)}">${escapeHtml(course.name)}</option>`
+      ).join('');
+  }
   el.loginScreen.classList.add('hidden');
   el.app.classList.remove('hidden');
 
@@ -687,7 +707,10 @@ function updatePostKindFields() {
   el.postCourseField?.classList.toggle('hidden', !isActivity);
   el.postDueDateField?.classList.toggle('hidden', !isActivity);
   if (el.postCourse) el.postCourse.required = false;
-  if (el.postDueDate) el.postDueDate.required = isActivity;
+  if (el.postDueDate) {
+    el.postDueDate.required = isActivity;
+    el.postDueDate.min = getLocalDateInputValue();
+  }
 }
 
 function renderTeacherPosts() {
@@ -789,8 +812,15 @@ async function publishClassPost(event) {
   const kind = el.postKind.value;
   const title = el.postTitle.value.trim();
   const content = el.postContent.value.trim();
-  if (!title || !content || (kind === 'activity' && !el.postDueDate.value)) {
+  const dueDate = kind === 'activity' ? el.postDueDate.value : '';
+  if (!title || !content || (kind === 'activity' && !dueDate)) {
     setTeacherPostMessage('Complete the title, instructions, and activity due date.', 'error');
+    return;
+  }
+  if (kind === 'activity' && dueDate < getLocalDateInputValue()) {
+    el.postDueDate.min = getLocalDateInputValue();
+    setTeacherPostMessage('Choose an activity due date that is today or later.', 'error');
+    el.postDueDate.focus();
     return;
   }
 
@@ -804,7 +834,7 @@ async function publishClassPost(event) {
         title,
         content,
         course_id: kind === 'activity' ? (el.postCourse.value || null) : null,
-        due_date: kind === 'activity' ? el.postDueDate.value : null,
+        due_date: kind === 'activity' ? dueDate : null,
         author_id: state.user.id
       })
       .select('id, kind, title, content, course_id, due_date, author_id, created_at')
@@ -1211,6 +1241,9 @@ el.authModeToggle.addEventListener('click', () => {
 });
 el.loginRole.addEventListener('change', () => setAuthMode('login'));
 el.postKind?.addEventListener('change', updatePostKindFields);
+el.postDueDate?.addEventListener('focus', () => {
+  el.postDueDate.min = getLocalDateInputValue();
+});
 el.teacherPostForm?.addEventListener('submit', publishClassPost);
 el.logoutBtn.addEventListener('click', handleLogout);
 el.accountLogoutBtn.addEventListener('click', handleLogout);
@@ -1241,6 +1274,7 @@ document.querySelectorAll('[data-view]').forEach(btn => {
 
 el.courseSearch.addEventListener('input', (e) => renderCourses(e.target.value));
 el.assignmentFilter.addEventListener('change', (e) => renderAssignments(e.target.value));
+updatePostKindFields();
 
 el.markAllRead.addEventListener('click', async () => {
   const unreadPosts = state.user?.role === 'student'
