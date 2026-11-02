@@ -102,6 +102,7 @@ const el = {
     grades: document.getElementById('view-grades'),
     notifications: document.getElementById('view-notifications'),
     teacher: document.getElementById('view-teacher'),
+    admin: document.getElementById('view-admin'),
     courseDetail: document.getElementById('view-course-detail'),
     profile: document.getElementById('view-profile'),
     settings: document.getElementById('view-settings')
@@ -166,7 +167,7 @@ function isCourseManager(user = state.user) {
 function showView(viewName) {
     closeAccountMenu();
     if (viewName === 'admin' && !state.user?.isStaff) return;
-    if (viewName === 'teacher' && !isCourseManager()) return;
+    if (viewName === 'teacher' && state.user?.role !== 'teacher') return;
     
     if (el.views) {
         Object.values(el.views).forEach(v => v?.classList.add('hidden'));
@@ -312,7 +313,7 @@ function getClassPostNotifications() {
       kind: post.kind === 'activity' ? 'New activity' : 'New announcement',
       message: `${post.title}: ${post.content}`,
       time: formatDate(post.created_at),
-      read: state.user?.role === 'teacher' ||
+      read: state.user?.isStaff ||
         state.readClassPostIds.has(String(post.id))
     }));
 }
@@ -611,34 +612,37 @@ function setAuthMessage(message, type = '') {
 }
 
 function setAuthMode(mode) {
-  const isSignup = mode === 'signup' && el.loginRole.value === 'student';
+  const isSignup = mode === 'signup';
+  const role = el.loginRole.value;
+  const isStudent = role === 'student';
   authMode = isSignup ? 'signup' : 'login';
-  el.studentIdField.classList.toggle('hidden', !isSignup);
-  el.loginStudentId.required = isSignup;
+  document.getElementById('fullNameField').classList.toggle('hidden', !isSignup || isStudent);
+  document.getElementById('loginFullName').required = isSignup && !isStudent;
+  el.studentIdField.classList.toggle('hidden', !isSignup || !isStudent);
+  el.loginStudentId.required = isSignup && isStudent;
   el.loginStudentId.autocomplete = isSignup ? 'username' : 'off';
   el.loginPassword.autocomplete = isSignup ? 'new-password' : 'current-password';
   el.loginPassword.minLength = isSignup ? 6 : 0;
-  el.authSubmit.innerHTML = isSignup ? 'Create student account <span>→</span>'
-    : el.loginRole.value === 'teacher' ? 'Teacher log in <span>→</span>'
-      : 'Log in to Blastoise Room <span>→</span>';
-  el.authSwitchPrompt.closest('.auth-switch').classList.toggle(
-    'hidden',
-    el.loginRole.value === 'teacher'
-  );
+  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+  el.authSubmit.innerHTML = isSignup
+    ? `Create ${role} account <span>→</span>`
+    : isStudent ? 'Log in to Blastoise Room <span>→</span>'
+      : `${roleLabel} log in <span>→</span>`;
   el.authModeToggle.textContent = isSignup ? 'Log in' : 'Create an account';
-  el.authSwitchPrompt.textContent = isSignup ? 'Already have an account?' : 'New student?';
+  el.authSwitchPrompt.textContent = isSignup ? 'Already have an account?' : 'New here?';
   setAuthMessage('');
 }
 
-function showAuthenticatedApp(user) {
+async function fetchRole(userId) {
+  const { data } = await supabaseClient.from('profiles').select('role').eq('id', userId).maybeSingle();
+  return ['admin', 'teacher'].includes(data?.role) ? data.role : 'student';
+}
+
+async function showAuthenticatedApp(user, knownRole) {
   const metadata = user.user_metadata || {};
   const accountId = metadata.student_id || user.email || 'Student';
-  const accountRole = String(user.app_metadata?.role || metadata.role || 'student')
-    .toLowerCase();
-  const isCourseManager = ['teacher', 'admin', 'administrator'].includes(accountRole);
-  const role = accountRole === 'admin' || accountRole === 'administrator'
-    ? 'Administrator'
-    : isCourseManager ? 'Teacher' : 'Student';
+  const isTeacher = user.app_metadata?.role === 'teacher' || metadata.role === 'teacher';
+  const role = isTeacher ? 'Teacher' : 'Student';
 
   state.user = {
     id: user.id,
@@ -646,7 +650,7 @@ function showAuthenticatedApp(user) {
     fullName: metadata.full_name || metadata.name || '',
     studentId: metadata.student_id || '',
     userMetadata: metadata,
-    role: accountRole,
+    role: role.toLowerCase(),
     email: user.email
   };
   const displayName = state.user.fullName || accountId;
@@ -657,11 +661,8 @@ function showAuthenticatedApp(user) {
   el.profileFullName.value = state.user.fullName;
   el.profileStudentId.value = state.user.studentId;
   el.profileEmail.textContent = state.user.email;
-  el.loginRole.value = isCourseManager ? 'teacher' : 'student';
-  el.teacherToolsNav?.classList.toggle('hidden', !isCourseManager);
-  document.querySelectorAll('[data-open-course-dialog]').forEach(button => {
-    button.classList.toggle('hidden', isCourseManager);
-  });
+  el.loginRole.value = state.user.role;
+  el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
   if (el.postCourse) {
     el.postCourse.innerHTML = '<option value="">All courses</option>' +
       state.courses.map(course =>
@@ -788,7 +789,7 @@ function getClassPostErrorMessage(error) {
 
 async function publishClassPost(event) {
   event.preventDefault();
-  if (state.user?.role !== 'teacher') {
+  if (!state.user?.isStaff) {
     setTeacherPostMessage('Only signed-in teachers can publish class posts.', 'error');
     return;
   }
@@ -1027,9 +1028,16 @@ async function handleLogin(e) {
   const password = el.loginPassword.value;
   const expectedRole = el.loginRole.value;
   const studentId = el.loginStudentId.value.trim();
-  if (authMode === 'signup' && !studentId) {
+  const fullName = document.getElementById('loginFullName').value.trim();
+  const isStaffSignup = authMode === 'signup' && expectedRole !== 'student';
+  if (authMode === 'signup' && !isStaffSignup && !studentId) {
     setAuthMessage('Enter your student ID.', 'error');
     el.loginStudentId.focus();
+    return;
+  }
+  if (isStaffSignup && !fullName) {
+    setAuthMessage('Enter your full name.', 'error');
+    document.getElementById('loginFullName').focus();
     return;
   }
 
@@ -1044,12 +1052,27 @@ async function handleLogin(e) {
         email,
         password,
         options: {
-          data: {
-            student_id: studentId
-          }
+          data: isStaffSignup
+            ? { full_name: fullName, requested_role: expectedRole }
+            : { student_id: studentId }
         }
       });
       if (error) throw error;
+
+      if (isStaffSignup) {
+        // The requested role is only a request. An existing admin must approve it
+        // in the profiles table, so nobody can make themselves staff from this form.
+        if (data.session) await supabaseClient.auth.signOut();
+        setAuthMode('login');
+        el.loginEmail.value = email;
+        setAuthMessage(
+          `${expectedRole.charAt(0).toUpperCase() + expectedRole.slice(1)} account created. ` +
+          'An admin must approve your role before you can log in as staff. ' +
+          'Check your email if a confirmation link is required.',
+          'success'
+        );
+        return;
+      }
 
       if (data.session) {
         showAuthenticatedApp(data.user);
@@ -1069,13 +1092,13 @@ async function handleLogin(e) {
       password
     });
     if (error) throw error;
-    const actualRole = data.user.app_metadata?.role === 'teacher' ? 'teacher' : 'student';
+    const actualRole = await fetchRole(data.user.id);
     if (actualRole !== expectedRole) {
       const { error: signOutError } = await supabaseClient.auth.signOut();
       if (signOutError) throw signOutError;
       throw new Error(`This account is not registered as a ${expectedRole}.`);
     }
-    showAuthenticatedApp(data.user);
+    showAuthenticatedApp(data.user, actualRole);
   } catch (error) {
     setAuthMessage(error.message || 'Authentication failed. Please try again.', 'error');
   } finally {
@@ -1223,7 +1246,7 @@ el.loginForm.addEventListener('submit', handleLogin);
 el.authModeToggle.addEventListener('click', () => {
   setAuthMode(authMode === 'login' ? 'signup' : 'login');
 });
-el.loginRole.addEventListener('change', () => setAuthMode('login'));
+el.loginRole.addEventListener('change', () => setAuthMode(authMode));
 el.postKind?.addEventListener('change', updatePostKindFields);
 el.postDueDate?.addEventListener('focus', () => {
   el.postDueDate.min = getLocalDateInputValue();
