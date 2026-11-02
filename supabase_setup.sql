@@ -38,6 +38,139 @@ create policy "Teachers can publish class posts"
     and author_id = (select auth.uid())
   );
 
+create table if not exists public.class_post_reads (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  post_id bigint not null references public.class_posts (id) on delete cascade,
+  read_at timestamptz not null default now(),
+  primary key (user_id, post_id)
+);
+
+alter table public.class_post_reads enable row level security;
+
+revoke all on public.class_post_reads from anon;
+grant select, insert, update on public.class_post_reads to authenticated;
+
+drop policy if exists "Students can read their own post read status"
+  on public.class_post_reads;
+create policy "Students can read their own post read status"
+  on public.class_post_reads
+  for select
+  to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists "Students can save their own post read status"
+  on public.class_post_reads;
+create policy "Students can save their own post read status"
+  on public.class_post_reads
+  for insert
+  to authenticated
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "Students can update their own post read status"
+  on public.class_post_reads;
+create policy "Students can update their own post read status"
+  on public.class_post_reads
+  for update
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+do $$
+begin
+  if exists (
+    select 1 from pg_publication where pubname = 'supabase_realtime'
+  ) and not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'class_posts'
+  ) then
+    execute 'alter publication supabase_realtime add table public.class_posts';
+  end if;
+end;
+$$;
+
+create table if not exists public.assignment_submissions (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  assignment_id text not null,
+  response text not null default '',
+  attachments jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(attachments) = 'array'),
+  submitted_at timestamptz not null default now(),
+  primary key (user_id, assignment_id)
+);
+
+alter table public.assignment_submissions enable row level security;
+
+revoke all on public.assignment_submissions from anon;
+grant select, insert, update on public.assignment_submissions to authenticated;
+
+drop policy if exists "Students can read their own assignment submissions"
+  on public.assignment_submissions;
+create policy "Students can read their own assignment submissions"
+  on public.assignment_submissions
+  for select
+  to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists "Students can create their own assignment submissions"
+  on public.assignment_submissions;
+create policy "Students can create their own assignment submissions"
+  on public.assignment_submissions
+  for insert
+  to authenticated
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "Students can update their own assignment submissions"
+  on public.assignment_submissions;
+create policy "Students can update their own assignment submissions"
+  on public.assignment_submissions
+  for update
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('assignment-submissions', 'assignment-submissions', false, 52428800, null)
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Students can upload their own assignment files"
+  on storage.objects;
+create policy "Students can upload their own assignment files"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'assignment-submissions'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
+drop policy if exists "Students can read their own assignment files"
+  on storage.objects;
+create policy "Students can read their own assignment files"
+  on storage.objects
+  for select
+  to authenticated
+  using (
+    bucket_id = 'assignment-submissions'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
+drop policy if exists "Students can delete their own assignment files"
+  on storage.objects;
+create policy "Students can delete their own assignment files"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'assignment-submissions'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
 -- Grant an existing account teacher access in the Supabase SQL editor:
 -- update auth.users
 -- set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"teacher"}'::jsonb

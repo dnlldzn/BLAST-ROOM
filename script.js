@@ -2,6 +2,8 @@
 const SUPABASE_URL = 'https://jdyqyzfdmahqshqbiadx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_xNXIvvcgLuqQQB1uCk6-Ig_4s2HlJv5';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const ASSIGNMENT_SUBMISSIONS_BUCKET = 'assignment-submissions';
+const MAX_ASSIGNMENT_FILE_SIZE = 50 * 1024 * 1024;
 let authMode = 'login';
 
 // === APP STATE ===
@@ -15,9 +17,9 @@ const state = {
     { id: 'OLMATH', name: 'OLMATH01', instructor: 'Ms. Mary Joyce Luceño', progress: 25, modules: { total: 12, completed: 3 }, color: '#b68b5b' }
   ],
   assignments: [
-    { id: 'a1', title: 'Project Dream House', course: 'AUTOCAD', dueDate: '2026-10-19', status: 'pending', description: 'Build your Dream House using the Requirements in your module.' },
-    { id: 'a2', title: 'SQL Query Practice', course: 'OLIMFBDS', dueDate: '2026-10-21', status: 'pending', description: 'Write 5 SELECT queries filtering and sorting data.' },
-    { id: 'a3', title: 'Multidisciplinary Project Design', course: 'OLCOEPRO', dueDate: '2026-10-22', status: 'pending', description: '300-word essay about engineering.' },
+    { id: 'a1', title: 'Project Dream House', course: 'AUTOCAD', dueDate: '2026-11-09', status: 'pending', description: 'Build your Dream House using the Requirements in your module.' },
+    { id: 'a2', title: 'SQL Query Practice', course: 'OLIMFBDS', dueDate: '2026-11-11', status: 'pending', description: 'Write 5 SELECT queries filtering and sorting data.' },
+    { id: 'a3', title: 'Multidisciplinary Project Design', course: 'OLCOEPRO', dueDate: '2026-11-16', status: 'pending', description: '300-word essay about engineering.' },
     { id: 'a4', title: 'Data Management', course: 'OLMATH', dueDate: '2026-10-10', status: 'submitted', description: 'Survey 40 students about their Daily Allowancae.' }
   ],
   notifications: [
@@ -26,6 +28,9 @@ const state = {
     { id: 'n3', message: 'Class reminder: Database lecture tomorrow 9AM', time: '2 days ago', read: true }
   ],
   classPosts: [],
+  readClassPostIds: new Set(),
+  classPostsChannel: null,
+  submissions: [],
   grades: {
     overall: 88.5, letter: 'B+',
     courses: [
@@ -41,6 +46,7 @@ const state = {
 // === DOM ELEMENTS ===
 const el = {
   loginScreen: document.getElementById('loginScreen'),
+  dashboardDate: document.getElementById('dashboardDate'),
   app: document.getElementById('app'),
   loginForm: document.getElementById('loginForm'),
   loginRole: document.getElementById('loginRole'),
@@ -70,15 +76,33 @@ const el = {
   userNameTop: document.getElementById('userNameTop'),
   userRoleTop: document.getElementById('userRoleTop'),
   userAvatar: document.getElementById('userAvatar'),
+  accountMenuToggle: document.getElementById('accountMenuToggle'),
+  accountMenu: document.getElementById('accountMenu'),
+  accountLogoutBtn: document.getElementById('accountLogoutBtn'),
   welcomeName: document.getElementById('welcomeName'),
   logoutBtn: document.getElementById('logoutBtn'),
+  profileForm: document.getElementById('profileForm'),
+  profileFullName: document.getElementById('profileFullName'),
+  profileStudentId: document.getElementById('profileStudentId'),
+  profileStudentIdField: document.getElementById('profileStudentIdField'),
+  profileEmail: document.getElementById('profileEmail'),
+  profileMessage: document.getElementById('profileMessage'),
+  saveProfileButton: document.getElementById('saveProfileButton'),
+  settingsForm: document.getElementById('settingsForm'),
+  settingsEmail: document.getElementById('settingsEmail'),
+  settingsPassword: document.getElementById('settingsPassword'),
+  settingsPasswordConfirm: document.getElementById('settingsPasswordConfirm'),
+  settingsMessage: document.getElementById('settingsMessage'),
+  saveSettingsButton: document.getElementById('saveSettingsButton'),
   views: {
     dashboard: document.getElementById('view-dashboard'),
     courses: document.getElementById('view-courses'),
     assignments: document.getElementById('view-assignments'),
     grades: document.getElementById('view-grades'),
     notifications: document.getElementById('view-notifications'),
-    courseDetail: document.getElementById('view-course-detail')
+    courseDetail: document.getElementById('view-course-detail'),
+    profile: document.getElementById('view-profile'),
+    settings: document.getElementById('view-settings')
   },
   navItems: document.querySelectorAll('.nav-item[data-view]'),
   statCourses: document.getElementById('statCourses'),
@@ -110,6 +134,10 @@ const el = {
   dialogTitle: document.getElementById('dialogTitle'),
   dialogDescription: document.getElementById('dialogDescription'),
   assignmentAnswer: document.getElementById('assignmentAnswer'),
+  assignmentFiles: document.getElementById('assignmentFiles'),
+  assignmentFileList: document.getElementById('assignmentFileList'),
+  assignmentSubmissionMessage: document.getElementById('assignmentSubmissionMessage'),
+  submitAssignmentButton: document.getElementById('submitAssignmentButton'),
   assignmentForm: document.getElementById('assignmentForm'),
   closeAssignmentDialog: document.getElementById('closeAssignmentDialog'),
   cancelAssignment: document.getElementById('cancelAssignment'),
@@ -121,6 +149,7 @@ const el = {
 
 // === UTILITY ===
 function showView(viewName) {
+    closeAccountMenu();
     if (viewName === 'admin' && !state.user?.isStaff) return;
     
     if (el.views) {
@@ -141,11 +170,36 @@ function showView(viewName) {
     }
     
     state.activeView = viewName;
+    if (viewName === 'profile') populateProfileForm();
+    if (viewName === 'settings') populateSettingsForm();
     if (viewName === 'admin') loadAdmin();
     if (window.innerWidth < 900 && el.sidebar) {
         el.sidebar.classList.remove('open');
     }
+
 }
+function closeAccountMenu() {
+  el.accountMenu.classList.add('hidden');
+  el.accountMenuToggle.setAttribute('aria-expanded', 'false');
+}
+
+function populateProfileForm() {
+  if (!state.user) return;
+  el.profileFullName.value = state.user.fullName;
+  el.profileStudentId.value = state.user.studentId;
+  el.profileEmail.textContent = state.user.email;
+  const isStudent = state.user.role === 'student';
+  el.profileStudentIdField.classList.toggle('hidden', !isStudent);
+  el.profileStudentId.required = isStudent;
+}
+
+function populateSettingsForm() {
+  if (!state.user) return;
+  el.settingsEmail.value = state.user.email;
+  el.settingsPassword.value = '';
+  el.settingsPasswordConfirm.value = '';
+}
+
 function showToast(msg) {
   el.toast.textContent = msg;
   el.toast.classList.add('show');
@@ -168,6 +222,10 @@ function escapeHtml(value) {
 }
 
 function getAssignments() {
+  const getStatus = (id, defaultStatus = 'pending') =>
+    state.submissions.some(submission => submission.assignment_id === id)
+      ? 'submitted'
+      : defaultStatus;
   const activities = state.classPosts
     .filter(post => post.kind === 'activity')
     .map(post => ({
@@ -175,38 +233,59 @@ function getAssignments() {
       title: post.title,
       course: post.course_id || 'All courses',
       dueDate: post.due_date || new Date(post.created_at),
-      status: post.status || 'pending',
+      status: getStatus(`post-${post.id}`, post.status || 'pending'),
       description: post.content
     }));
-  return [...state.assignments, ...activities];
+  return [
+    ...state.assignments.map(assignment => ({
+      ...assignment,
+      status: getStatus(assignment.id, assignment.status)
+    })),
+    ...activities
+  ];
 }
 
 function formatDate(d) {
-  const date = new Date(d);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(d)
+    ? new Date(`${d}T00:00:00`)
+    : new Date(d);
   const opts = { month: 'short', day: 'numeric' };
   return date.toLocaleDateString('en-US', opts);
 }
 
 function getDaysRemaining(d) {
-  const due = new Date(d);
-  const now = new Date();
-  return Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(d)
+    ? new Date(`${d}T00:00:00`)
+    : new Date(d);
+  const today = new Date();
+  due.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return Math.round((due - today) / (1000 * 60 * 60 * 24));
+}
+
+function renderDashboardDate() {
+  el.dashboardDate.textContent = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  });
 }
 
 function updateNotificationBadge() {
-  const unread = [...state.notifications, ...getAnnouncementNotifications()]
+  const unread = [...state.notifications, ...getClassPostNotifications()]
     .filter(n => !n.read).length;
   el.notificationDot.style.display = unread > 0 ? 'block' : 'none';
 }
 
-function getAnnouncementNotifications() {
+function getClassPostNotifications() {
   return state.classPosts
-    .filter(post => post.kind === 'announcement')
     .map(post => ({
       id: `post-${post.id}`,
+      kind: post.kind === 'activity' ? 'New activity' : 'New announcement',
       message: `${post.title}: ${post.content}`,
       time: formatDate(post.created_at),
-      read: Boolean(post.read)
+      read: state.user?.role === 'teacher' ||
+        state.readClassPostIds.has(String(post.id))
     }));
 }
 
@@ -251,7 +330,13 @@ function renderDeadlines() {
     return `
       <div class="deadline-item ${cls}">
         <strong>${escapeHtml(a.title)}</strong>
-          <p class="muted">${escapeHtml(getCourseName(a.course))} · Due ${formatDate(a.dueDate)} (${days} days left)</p>
+          <p class="muted">${escapeHtml(getCourseName(a.course))} · Due ${formatDate(a.dueDate)} (${
+      days < 0
+        ? `${Math.abs(days)} days overdue`
+        : days === 0
+          ? 'Due today'
+          : `${days} day${days === 1 ? '' : 's'} left`
+    })</p>
       </div>
     `;
   }).join('');
@@ -340,9 +425,14 @@ function renderAssignments(filter = 'all') {
 function openAssignmentDialog(assignmentId) {
   const a = getAssignments().find(item => item.id === assignmentId);
   if (!a) return;
+  const submission = state.submissions.find(item => item.assignment_id === assignmentId);
   el.dialogTitle.textContent = a.title;
   el.dialogDescription.textContent = a.description;
-  el.assignmentAnswer.value = '';
+  el.assignmentAnswer.value = submission?.response || '';
+  el.assignmentAnswer.required = !submission?.attachments?.length;
+  el.assignmentFiles.value = '';
+  el.assignmentFileList.replaceChildren();
+  setAssignmentSubmissionMessage('');
   el.assignmentDialog.showModal();
   el.assignmentDialog.dataset.id = assignmentId;
 }
@@ -371,9 +461,10 @@ function renderGrades() {
 
 function renderNotifications() {
   updateNotificationBadge();
-  const notifications = [...state.notifications, ...getAnnouncementNotifications()];
+  const notifications = [...getClassPostNotifications(), ...state.notifications];
   el.notificationsList.innerHTML = notifications.map(n => `
     <div class="notification-item ${!n.read ? 'unread' : ''}" data-id="${n.id}">
+      ${n.kind ? `<strong>${escapeHtml(n.kind)}</strong>` : ''}
       <p>${escapeHtml(n.message)}</p>
       <small class="muted">${escapeHtml(n.time)}</small>
     </div>
@@ -553,16 +644,29 @@ function showAuthenticatedApp(user) {
   const isTeacher = user.app_metadata?.role === 'teacher' || metadata.role === 'teacher';
   const role = isTeacher ? 'Teacher' : 'Student';
 
-  state.user = { accountId, role: role.toLowerCase(), email: user.email };
-  el.welcomeName.textContent = accountId;
-  el.userNameTop.textContent = accountId;
+  state.user = {
+    id: user.id,
+    accountId,
+    fullName: metadata.full_name || metadata.name || '',
+    studentId: metadata.student_id || '',
+    userMetadata: metadata,
+    role: role.toLowerCase(),
+    email: user.email
+  };
+  const displayName = state.user.fullName || accountId;
+  el.welcomeName.textContent = displayName;
+  el.userNameTop.textContent = displayName;
   el.userRoleTop.textContent = `${role} account`;
-  el.userAvatar.textContent = accountId.slice(0, 2).toUpperCase();
+  el.userAvatar.textContent = displayName.slice(0, 2).toUpperCase();
+  el.profileFullName.value = state.user.fullName;
+  el.profileStudentId.value = state.user.studentId;
+  el.profileEmail.textContent = state.user.email;
   el.loginRole.value = state.user.role;
   el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
   el.loginScreen.classList.add('hidden');
   el.app.classList.remove('hidden');
 
+  renderDashboardDate();
   renderStats();
   renderDashboardCourses();
   renderDeadlines();
@@ -571,7 +675,9 @@ function showAuthenticatedApp(user) {
   renderGrades();
   renderNotifications();
   loadClassPosts();
-  showToast(`Welcome, ${accountId}!`);
+  startClassPostNotifications();
+  loadMySubmissions();
+  showToast(`Welcome, ${displayName}!`);
 }
 
 function updatePostKindFields() {
@@ -611,7 +717,21 @@ async function loadClassPosts() {
       .order('created_at', { ascending: false });
     if (error) throw error;
 
-    state.classPosts = data || [];
+    if (state.user?.role === 'student') {
+      const { data: readPosts, error: readError } = await supabaseClient
+        .from('class_post_reads')
+        .select('post_id')
+        .eq('user_id', state.user.id);
+      if (readError) throw readError;
+      state.readClassPostIds = new Set(
+        (readPosts || []).map(post => String(post.post_id))
+      );
+    }
+
+    const postsById = new Map(state.classPosts.map(post => [String(post.id), post]));
+    (data || []).forEach(post => postsById.set(String(post.id), post));
+    state.classPosts = [...postsById.values()]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     renderAssignments(el.assignmentFilter.value);
     renderDeadlines();
     renderNotifications();
@@ -623,9 +743,38 @@ async function loadClassPosts() {
   }
 }
 
+function startClassPostNotifications() {
+  if (state.user?.role !== 'student') return;
+
+  state.classPostsChannel = supabaseClient
+    .channel(`class-posts-${state.user.id}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'class_posts' },
+      ({ new: post }) => {
+        if (!state.user || state.user.role !== 'student') return;
+        if (state.classPosts.some(existing => String(existing.id) === String(post.id))) return;
+
+        state.classPosts = [post, ...state.classPosts]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        renderAssignments(el.assignmentFilter.value);
+        renderDeadlines();
+        renderNotifications();
+        updateAssignmentCount();
+        showToast(`New ${post.kind === 'activity' ? 'activity' : 'announcement'}: ${post.title}`);
+      }
+    )
+    .subscribe((status, error) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error('Live class-post notifications are unavailable:', error || status);
+        showToast('Live notifications are unavailable. Refresh to check for new posts.');
+      }
+    });
+}
+
 function getClassPostErrorMessage(error) {
   if (error && error.code === 'PGRST205') {
-    return 'Class posts are not set up yet. Run supabase_setup.sql in the Supabase SQL Editor.';
+    return 'Class posts or notification reads are not set up yet. Run supabase_setup.sql in the Supabase SQL Editor.';
   }
   return `Could not access class posts: ${error?.message || 'Please try again.'}`;
 }
@@ -684,6 +833,178 @@ function setTeacherPostMessage(message, type = '') {
 
   el.teacherPostMessage.textContent = message;
   el.teacherPostMessage.className = `auth-message${type ? ` ${type}` : ''}`;
+}
+
+function setAssignmentSubmissionMessage(message, type = '') {
+  el.assignmentSubmissionMessage.textContent = message;
+  el.assignmentSubmissionMessage.className =
+    `auth-message${type ? ` ${type}` : ''}`;
+}
+
+function updateAssignmentFileList() {
+  const files = Array.from(el.assignmentFiles.files || []);
+  el.assignmentFileList.replaceChildren();
+  const existingSubmission = state.submissions.find(
+    submission => submission.assignment_id === el.assignmentDialog.dataset.id
+  );
+  el.assignmentAnswer.required =
+    files.length === 0 && !existingSubmission?.attachments?.length;
+
+  files.forEach(file => {
+    const item = document.createElement('li');
+    const size = file.size < 1024 * 1024
+      ? `${Math.ceil(file.size / 1024)} KB`
+      : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    item.textContent = `${file.name} (${size})`;
+    el.assignmentFileList.appendChild(item);
+  });
+}
+
+function getAssignmentSubmissionErrorMessage(error) {
+  if (error?.code === '42P01' || error?.code === 'PGRST205') {
+    return 'Assignment submissions are not set up yet. Run supabase_setup.sql in the Supabase SQL Editor.';
+  }
+  return error?.message || 'Please try again.';
+}
+
+async function loadMySubmissions() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('assignment_submissions')
+      .select('assignment_id, response, attachments, submitted_at')
+      .eq('user_id', state.user.id);
+    if (error) throw error;
+
+    state.submissions = data || [];
+    renderAssignments(el.assignmentFilter.value);
+    renderDeadlines();
+    updateAssignmentCount();
+  } catch (error) {
+    console.error('Unable to load assignment submissions:', error);
+    showToast(
+      `Could not load previous submissions: ${getAssignmentSubmissionErrorMessage(error)}`
+    );
+  }
+}
+
+async function submitAssignment(event) {
+  event.preventDefault();
+  const assignmentId = el.assignmentDialog.dataset.id;
+  const assignment = getAssignments().find(item => item.id === assignmentId);
+  if (!assignment) {
+    setAssignmentSubmissionMessage('This assignment could not be found.', 'error');
+    return;
+  }
+
+  const files = Array.from(el.assignmentFiles.files || []);
+  const oversizedFile = files.find(file => file.size > MAX_ASSIGNMENT_FILE_SIZE);
+  if (oversizedFile) {
+    setAssignmentSubmissionMessage(
+      `${oversizedFile.name} exceeds the 50 MB per-file limit.`,
+      'error'
+    );
+    return;
+  }
+
+  const response = el.assignmentAnswer.value.trim();
+  const previousSubmission = state.submissions.find(
+    submission => submission.assignment_id === assignmentId
+  );
+  if (!response && !files.length && !previousSubmission?.attachments?.length) {
+    setAssignmentSubmissionMessage('Enter your work or attach at least one file.', 'error');
+    return;
+  }
+
+  el.submitAssignmentButton.disabled = true;
+  setAssignmentSubmissionMessage(files.length ? 'Uploading your files…' : 'Submitting…');
+  const uploadedPaths = [];
+  try {
+    const attachments = files.length
+      ? []
+      : previousSubmission?.attachments || [];
+
+    for (const [index, file] of files.entries()) {
+      const safeName = file.name.replace(/[\\/#?%]/g, '_');
+      const path = `${state.user.id}/${encodeURIComponent(assignmentId)}/${crypto.randomUUID()}-${safeName}`;
+      setAssignmentSubmissionMessage(`Uploading file ${index + 1} of ${files.length}…`);
+      const { error } = await supabaseClient.storage
+        .from(ASSIGNMENT_SUBMISSIONS_BUCKET)
+        .upload(path, file, {
+          cacheControl: '3600',
+          contentType: file.type || 'application/octet-stream',
+          upsert: false
+        });
+      if (error) throw error;
+
+      uploadedPaths.push(path);
+      attachments.push({
+        path,
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size
+      });
+    }
+
+    const { data, error } = await supabaseClient
+      .from('assignment_submissions')
+      .upsert({
+        user_id: state.user.id,
+        assignment_id: assignmentId,
+        response,
+        attachments,
+        submitted_at: new Date().toISOString()
+      }, { onConflict: 'user_id,assignment_id' })
+      .select('assignment_id, response, attachments, submitted_at')
+      .single();
+    if (error) throw error;
+
+    const previousPaths = files.length
+      ? (previousSubmission?.attachments || []).map(file => file.path).filter(Boolean)
+      : [];
+    state.submissions = [
+      ...state.submissions.filter(item => item.assignment_id !== assignmentId),
+      data
+    ];
+    renderAssignments(el.assignmentFilter.value);
+    renderDeadlines();
+    updateAssignmentCount();
+    el.assignmentDialog.close();
+    el.assignmentForm.reset();
+    el.assignmentFileList.replaceChildren();
+    showToast(`Submitted: ${assignment.title} ✅`);
+
+    if (previousPaths.length) {
+      try {
+        const { error: cleanupError } = await supabaseClient.storage
+          .from(ASSIGNMENT_SUBMISSIONS_BUCKET)
+          .remove(previousPaths);
+        if (cleanupError) throw cleanupError;
+      } catch (cleanupError) {
+        console.error('Unable to remove replaced submission files:', cleanupError);
+        showToast('Submission saved, but replaced files could not be removed.');
+      }
+    }
+  } catch (error) {
+    let cleanupMessage = '';
+    if (uploadedPaths.length) {
+      try {
+        const { error: cleanupError } = await supabaseClient.storage
+          .from(ASSIGNMENT_SUBMISSIONS_BUCKET)
+          .remove(uploadedPaths);
+        if (cleanupError) throw cleanupError;
+      } catch (cleanupError) {
+        console.error('Unable to clean up incomplete submission uploads:', cleanupError);
+        cleanupMessage = ' Some uploaded files may need cleanup.';
+      }
+    }
+    console.error('Unable to submit assignment:', error);
+    setAssignmentSubmissionMessage(
+      `Could not submit your work: ${getAssignmentSubmissionErrorMessage(error)}${cleanupMessage}`,
+      'error'
+    );
+  } finally {
+    el.submitAssignmentButton.disabled = false;
+  }
 }
 
 async function handleLogin(e) {
@@ -750,7 +1071,110 @@ async function handleLogin(e) {
   }
 }
 
+function setAccountMessage(element, message, type = '') {
+  element.textContent = message;
+  element.className = `auth-message${type ? ` ${type}` : ''}`;
+}
+
+async function handleProfileSave(e) {
+  e.preventDefault();
+  if (!state.user) return;
+
+  const fullName = el.profileFullName.value.trim();
+  const studentId = el.profileStudentId.value.trim();
+  if (!fullName || (state.user.role === 'student' && !studentId)) {
+    setAccountMessage(el.profileMessage, 'Complete the required profile fields.', 'error');
+    return;
+  }
+
+  const metadata = { ...state.user.userMetadata, full_name: fullName };
+  if (state.user.role === 'student') metadata.student_id = studentId;
+
+  el.saveProfileButton.disabled = true;
+  setAccountMessage(el.profileMessage, 'Saving your profile…');
+  try {
+    const { data, error } = await supabaseClient.auth.updateUser({ data: metadata });
+    if (error) throw error;
+
+    state.user.userMetadata = data.user.user_metadata || metadata;
+    state.user.fullName = fullName;
+    if (state.user.role === 'student') {
+      state.user.studentId = studentId;
+      state.user.accountId = studentId;
+    }
+    const displayName = fullName || state.user.accountId;
+    el.welcomeName.textContent = displayName;
+    el.userNameTop.textContent = displayName;
+    el.userAvatar.textContent = displayName.slice(0, 2).toUpperCase();
+    setAccountMessage(el.profileMessage, 'Your profile has been saved.', 'success');
+    showToast('Profile updated.');
+  } catch (error) {
+    setAccountMessage(
+      el.profileMessage,
+      `Could not save your profile: ${error.message || 'Please try again.'}`,
+      'error'
+    );
+  } finally {
+    el.saveProfileButton.disabled = false;
+  }
+}
+
+async function handleSettingsSave(e) {
+  e.preventDefault();
+  if (!state.user) return;
+
+  const email = el.settingsEmail.value.trim();
+  const password = el.settingsPassword.value;
+  const passwordConfirm = el.settingsPasswordConfirm.value;
+  if (password && password !== passwordConfirm) {
+    setAccountMessage(el.settingsMessage, 'Your passwords do not match.', 'error');
+    el.settingsPasswordConfirm.focus();
+    return;
+  }
+  if (!password && passwordConfirm) {
+    setAccountMessage(el.settingsMessage, 'Enter a new password to confirm.', 'error');
+    el.settingsPassword.focus();
+    return;
+  }
+
+  const updates = {};
+  if (email !== state.user.email) updates.email = email;
+  if (password) updates.password = password;
+  if (!Object.keys(updates).length) {
+    setAccountMessage(el.settingsMessage, 'There are no settings changes to save.', 'error');
+    return;
+  }
+
+  el.saveSettingsButton.disabled = true;
+  setAccountMessage(el.settingsMessage, 'Saving your settings…');
+  try {
+    const { data, error } = await supabaseClient.auth.updateUser(updates);
+    if (error) throw error;
+
+    state.user.email = data.user.email || state.user.email;
+    el.profileEmail.textContent = state.user.email;
+    el.settingsEmail.value = state.user.email;
+    el.settingsPassword.value = '';
+    el.settingsPasswordConfirm.value = '';
+    const message = updates.email && updates.password
+      ? 'Check your new email address to confirm the change. Your password has also been updated.'
+      : updates.email
+        ? 'Check your new email address to confirm the change.'
+        : 'Your password has been updated.';
+    setAccountMessage(el.settingsMessage, message, 'success');
+  } catch (error) {
+    setAccountMessage(
+      el.settingsMessage,
+      `Could not save your settings: ${error.message || 'Please try again.'}`,
+      'error'
+    );
+  } finally {
+    el.saveSettingsButton.disabled = false;
+  }
+}
+
 async function handleLogout() {
+  closeAccountMenu();
   try {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
@@ -760,6 +1184,17 @@ async function handleLogout() {
   }
   state.user = null;
   state.classPosts = [];
+  state.readClassPostIds = new Set();
+  state.submissions = [];
+  const classPostsChannel = state.classPostsChannel;
+  state.classPostsChannel = null;
+  if (classPostsChannel) {
+    try {
+      await supabaseClient.removeChannel(classPostsChannel);
+    } catch (error) {
+      console.error('Unable to stop live class-post notifications:', error);
+    }
+  }
   el.teacherToolsNav?.classList.add('hidden');
   el.loginScreen.classList.remove('hidden');
   el.app.classList.add('hidden');
@@ -778,6 +1213,23 @@ el.loginRole.addEventListener('change', () => setAuthMode('login'));
 el.postKind?.addEventListener('change', updatePostKindFields);
 el.teacherPostForm?.addEventListener('submit', publishClassPost);
 el.logoutBtn.addEventListener('click', handleLogout);
+el.accountLogoutBtn.addEventListener('click', handleLogout);
+el.accountMenuToggle.addEventListener('click', () => {
+  const isExpanded = el.accountMenuToggle.getAttribute('aria-expanded') === 'true';
+  el.accountMenu.classList.toggle('hidden', isExpanded);
+  el.accountMenuToggle.setAttribute('aria-expanded', String(!isExpanded));
+});
+document.addEventListener('click', event => {
+  if (!el.accountMenu.contains(event.target) &&
+      !el.accountMenuToggle.contains(event.target)) {
+    closeAccountMenu();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeAccountMenu();
+});
+el.profileForm.addEventListener('submit', handleProfileSave);
+el.settingsForm.addEventListener('submit', handleSettingsSave);
 el.mobileMenu.addEventListener('click', () => el.sidebar.classList.toggle('open'));
 el.backToCourses.addEventListener('click', () => showView('courses'));
 
@@ -790,30 +1242,38 @@ document.querySelectorAll('[data-view]').forEach(btn => {
 el.courseSearch.addEventListener('input', (e) => renderCourses(e.target.value));
 el.assignmentFilter.addEventListener('change', (e) => renderAssignments(e.target.value));
 
-el.markAllRead.addEventListener('click', () => {
+el.markAllRead.addEventListener('click', async () => {
+  const unreadPosts = state.user?.role === 'student'
+    ? state.classPosts.filter(post => !state.readClassPostIds.has(String(post.id)))
+    : [];
+  if (unreadPosts.length) {
+    const readRecords = unreadPosts.map(post => ({
+      user_id: state.user.id,
+      post_id: post.id
+    }));
+    const { error } = await supabaseClient
+      .from('class_post_reads')
+      .upsert(readRecords, {
+        onConflict: 'user_id,post_id',
+        ignoreDuplicates: true
+      });
+    if (error) {
+      console.error('Unable to save notification read status:', error);
+      showToast(`Could not mark teacher posts as read: ${error.message}`);
+      return;
+    }
+    unreadPosts.forEach(post => state.readClassPostIds.add(String(post.id)));
+  }
+
   state.notifications.forEach(n => n.read = true);
-  state.classPosts.forEach(post => {
-    if (post.kind === 'announcement') post.read = true;
-  });
   renderNotifications();
   showToast('All marked as read ✓');
 });
 
 el.closeAssignmentDialog.addEventListener('click', () => el.assignmentDialog.close());
 el.cancelAssignment.addEventListener('click', () => el.assignmentDialog.close());
-el.assignmentForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = el.assignmentDialog.dataset.id;
-  const a = state.assignments.find(x => x.id === id);
-  if (a) {
-    a.status = 'submitted';
-    renderAssignments(el.assignmentFilter.value);
-    renderDeadlines();
-    updateAssignmentCount();
-    showToast(`Submitted: ${item.title} ✅`);
-  }
-  el.assignmentDialog.close();
-});
+el.assignmentFiles.addEventListener('change', updateAssignmentFileList);
+el.assignmentForm.addEventListener('submit', submitAssignment);
 
 el.openAiFromBanner.addEventListener('click', toggleAi);
 el.sidebarAskAi.addEventListener('click', toggleAi);
@@ -835,6 +1295,7 @@ el.quickPrompts.forEach(btn => {
 });
 
 // === INIT ===
+renderDashboardDate();
 setAuthMode('login');
 async function restoreSession() {
   try {
@@ -940,7 +1401,7 @@ async function loadAdminModules() {
   }));
 }
 
-document.getElementById('moduleForm').addEventListener('submit', async (e) => {
+document.getElementById('moduleForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const { error } = await supabaseClient.from('modules').insert({
     course_id: document.getElementById('moduleCourse').value,

@@ -12,7 +12,7 @@
   <!-- LOGIN SCREEN -->
   <main id="loginScreen" class="login-screen">
     <section class="login-card">
-      <div class="brand-mark">BR</div>
+      <img class="brand-mark" src="https://static.wikia.nocookie.net/pokeone/images/4/41/Blastoise.png/revision/latest?cb=20180916004040" alt="Blastoise Room logo">
       <p class="eyebrow">Blastoise Room</p>
       <h1>Welcome to Blastoise Room</h1>
       <p class="muted">
@@ -51,7 +51,7 @@
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#" data-view="dashboard">
-        <span class="brand-mark small">BR</span>
+        <img class="brand-mark small" src="https://static.wikia.nocookie.net/pokeone/images/4/41/Blastoise.png/revision/latest?cb=20180916004040" alt="">
         <span>Blastoise Room</span>
       </a>
       <div class="side-label">WORKSPACE</div>
@@ -98,16 +98,29 @@
           <strong id="pageCrumb">Dashboard</strong>
         </div>
         <div class="top-actions">
-          <button class="icon-btn" data-view="notifications"
+          <button class="icon-btn notification-btn" data-view="notifications"
             aria-label="Notifications">
-            ♧<i class="tiny-dot"></i>
+            <span class="pokeball-icon" aria-hidden="true"></span>
+            <i class="tiny-dot"></i>
           </button>
-          <div class="user-chip">
-            <div class="avatar" id="userAvatar">ST</div>
-            <div class="user-info">
+          <button id="accountMenuToggle" class="user-chip account-menu-toggle"
+            type="button" aria-label="Open account menu" aria-haspopup="true"
+            aria-expanded="false" aria-controls="accountMenu">
+            <span class="avatar" id="userAvatar">ST</span>
+            <span class="user-info">
               <strong id="userNameTop">Student</strong>
               <span id="userRoleTop">Student account</span>
-            </div>
+            </span>
+            <span class="account-menu-caret" aria-hidden="true">⌄</span>
+          </button>
+          <div id="accountMenu" class="account-menu hidden" role="menu"
+            aria-label="Account">
+            <button type="button" class="account-menu-item" data-view="profile"
+              role="menuitem">My profile</button>
+            <button type="button" class="account-menu-item" data-view="settings"
+              role="menuitem">Settings</button>
+            <button type="button" class="account-menu-item account-menu-logout"
+              id="accountLogoutBtn" role="menuitem">Log out</button>
           </div>
         </div>
       </header>
@@ -116,7 +129,7 @@
         <section id="view-dashboard" class="view">
           <div class="welcome-row">
             <div>
-              <p class="eyebrow">Saturday, OCTOBER 17</p>
+              <p id="dashboardDate" class="eyebrow"></p>
               <h1>
                 Good to see you,
                 <span id="welcomeName">Students</span>
@@ -331,6 +344,74 @@
           </button>
           <div id="courseDetailContent"></div>
         </section>
+        <!-- PROFILE -->
+        <section id="view-profile" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">YOUR ACCOUNT</p>
+              <h1>My profile</h1>
+              <p class="muted">Update the information shown on your account.</p>
+            </div>
+          </div>
+          <div class="panel account-panel">
+            <form id="profileForm" class="account-form">
+              <label for="profileFullName">Full name</label>
+              <input id="profileFullName" name="fullName" type="text"
+                maxlength="80" autocomplete="name" required>
+              <div id="profileStudentIdField">
+                <label for="profileStudentId">Student ID</label>
+                <input id="profileStudentId" name="studentId" type="text"
+                  maxlength="80" autocomplete="username">
+              </div>
+              <p class="account-hint">
+                Email address:
+                <strong id="profileEmail"></strong>
+                · <button type="button" class="text-button"
+                  data-view="settings">Manage in settings</button>
+              </p>
+              <p id="profileMessage" class="auth-message" role="status"
+                aria-live="polite"></p>
+              <div class="dialog-actions">
+                <button class="primary-btn" id="saveProfileButton"
+                  type="submit">Save profile</button>
+              </div>
+            </form>
+          </div>
+        </section>
+        <!-- SETTINGS -->
+        <section id="view-settings" class="view hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ACCOUNT PREFERENCES</p>
+              <h1>Settings</h1>
+              <p class="muted">Manage your sign-in email and password.</p>
+            </div>
+          </div>
+          <div class="panel account-panel">
+            <form id="settingsForm" class="account-form">
+              <label for="settingsEmail">Email address</label>
+              <input id="settingsEmail" name="email" type="email"
+                autocomplete="email" required>
+              <p class="account-hint">
+                Changing your email may require confirmation from your new address.
+              </p>
+              <label for="settingsPassword">New password</label>
+              <input id="settingsPassword" name="password" type="password"
+                autocomplete="new-password" minlength="6"
+                placeholder="Leave blank to keep your current password">
+              <label for="settingsPasswordConfirm">Confirm new password</label>
+              <input id="settingsPasswordConfirm" name="passwordConfirm"
+                type="password" autocomplete="new-password" minlength="6"
+                placeholder="Re-enter your new password">
+              <p id="settingsMessage" class="auth-message" role="status"
+                aria-live="polite"></p>
+              <div class="dialog-actions">
+                <button class="primary-btn" id="saveSettingsButton"
+                  type="submit">Save settings</button>
+              </div>
+            </form>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -402,13 +483,18 @@
         Your answer / submission notes
       </label>
       <textarea id="assignmentAnswer" rows="6"
-        placeholder="Type your answer or a note about your submission..."
-        required></textarea>
+        placeholder="Type your answer or a note about your submission..."></textarea>
+      <label for="assignmentFiles">Attach files (optional)</label>
+      <input id="assignmentFiles" type="file" multiple>
+      <p class="muted">Attach images, PDFs, documents, CAD files, or other formats. Maximum 50 MB per file.</p>
+      <ul id="assignmentFileList" class="assignment-file-list" aria-live="polite"></ul>
+      <p id="assignmentSubmissionMessage" class="auth-message"
+        role="status" aria-live="polite"></p>
       <div class="dialog-actions">
         <button type="button" class="secondary-btn" id="cancelAssignment">
           Cancel
         </button>
-        <button type="submit" class="primary-btn">
+        <button id="submitAssignmentButton" type="submit" class="primary-btn">
           Submit assignment →
         </button>
       </div>
