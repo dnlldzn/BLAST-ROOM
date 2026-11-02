@@ -31,6 +31,7 @@ const state = {
   readClassPostIds: new Set(),
   classPostsChannel: null,
   submissions: [],
+  enrolledCourses: [],
   grades: {
     overall: 88.5, letter: 'B+',
     courses: [
@@ -106,13 +107,11 @@ const el = {
     settings: document.getElementById('view-settings')
   },
   navItems: document.querySelectorAll('.nav-item[data-view]'),
-  statCourses: document.getElementById('statCourses'),
+  statSubmitted: document.getElementById('statSubmitted'),
   statPending: document.getElementById('statPending'),
   statAverage: document.getElementById('statAverage'),
   statModules: document.getElementById('statModules'),
-  dashboardCourses: document.getElementById('dashboardCourses'),
   dashboardDeadlines: document.getElementById('dashboardDeadlines'),
-  coursesGrid: document.getElementById('coursesGrid'),
   assignmentFilter: document.getElementById('assignmentFilter'),
   assignmentsTable: document.getElementById('assignmentsTable'),
   gradeAverage: document.getElementById('gradeAverage'),
@@ -144,15 +143,30 @@ const el = {
   cancelAssignment: document.getElementById('cancelAssignment'),
   backToCourses: document.getElementById('backToCourses'),
   courseDetailContent: document.getElementById('courseDetailContent'),
-  courseSearch: document.getElementById('courseSearch'),
-  assignmentCount: document.getElementById('assignmentCount')
+  assignmentCount: document.getElementById('assignmentCount'),
+  courseEnrollmentDialog: document.getElementById('courseEnrollmentDialog'),
+  courseEnrollmentForm: document.getElementById('courseEnrollmentForm'),
+  courseShareCode: document.getElementById('courseShareCode'),
+  courseEnrollmentMessage: document.getElementById('courseEnrollmentMessage'),
+  closeCourseEnrollmentDialog: document.getElementById('closeCourseEnrollmentDialog'),
+  cancelCourseEnrollment: document.getElementById('cancelCourseEnrollment'),
+  teacherCourseForm: document.getElementById('teacherCourseForm'),
+  teacherCourseName: document.getElementById('teacherCourseName'),
+  teacherCourseInstructor: document.getElementById('teacherCourseInstructor'),
+  teacherCourseMessage: document.getElementById('teacherCourseMessage'),
+  createTeacherCourseButton: document.getElementById('createTeacherCourseButton'),
+  teacherCoursesList: document.getElementById('teacherCoursesList')
 };
 
 // === UTILITY ===
+function isCourseManager(user = state.user) {
+  return ['teacher', 'admin', 'administrator'].includes(user?.role);
+}
+
 function showView(viewName) {
     closeAccountMenu();
     if (viewName === 'admin' && !state.user?.isStaff) return;
-    if (viewName === 'teacher' && state.user?.role !== 'teacher') return;
+    if (viewName === 'teacher' && !isCourseManager()) return;
     
     if (el.views) {
         Object.values(el.views).forEach(v => v?.classList.add('hidden'));
@@ -175,6 +189,7 @@ function showView(viewName) {
     if (viewName === 'profile') populateProfileForm();
     if (viewName === 'settings') populateSettingsForm();
     if (viewName === 'admin') loadAdmin();
+    if (viewName === 'teacher') loadTeacherCourses();
     if (window.innerWidth < 900 && el.sidebar) {
         el.sidebar.classList.remove('open');
     }
@@ -303,34 +318,20 @@ function getClassPostNotifications() {
 }
 
 function updateAssignmentCount() {
-  const pending = getAssignments().filter(a => a.status === 'pending').length;
+  const assignments = getAssignments();
+  const pending = assignments.filter(a => a.status === 'pending').length;
   el.assignmentCount.textContent = pending;
   el.statPending.textContent = pending;
+  el.statSubmitted.textContent = assignments.filter(a => a.status === 'submitted').length;
 }
 
 // === RENDER FUNCTIONS ===
 function renderStats() {
-  el.statCourses.textContent = state.courses.length;
   const totalCompleted = state.courses.reduce((s, c) => s + c.modules.completed, 0);
   const totalModules = state.courses.reduce((s, c) => s + c.modules.total, 0);
   el.statModules.textContent = `${totalCompleted}/${totalModules}`;
   el.statAverage.textContent = state.grades.overall + '%';
   updateAssignmentCount();
-}
-
-function renderDashboardCourses() {
-  el.dashboardCourses.innerHTML = state.courses.slice(0, 3).map(c => `
-    <div class="course-card" data-course="${c.id}">
-      <h3>${c.name}</h3>
-      <p class="muted">${c.instructor} · ${c.modules.completed}/${c.modules.total} modules</p>
-      <div class="course-progress">
-        <div class="progress-bar"><div class="progress-fill" style="width:${c.progress}%"></div></div>
-      </div>
-    </div>
-  `).join('');
-  el.dashboardCourses.querySelectorAll('.course-card').forEach(card => {
-    card.addEventListener('click', () => openCourseDetail(card.dataset.course));
-  });
 }
 
 function renderDeadlines() {
@@ -354,29 +355,6 @@ function renderDeadlines() {
       </div>
     `;
   }).join('');
-}
-
-function renderCourses(search = '') {
-  const filtered = state.courses.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.instructor.toLowerCase().includes(search.toLowerCase())
-  );
-  el.coursesGrid.innerHTML = filtered.map(c => `
-    <div class="course-full-card" data-course="${c.id}">
-      <div class="course-banner" style="background:linear-gradient(135deg,${c.color},${c.color}cc)"></div>
-      <div class="course-body">
-        <span class="course-tag">${c.progress}% Complete</span>
-        <h3>${c.name}</h3>
-        <p class="muted">${c.instructor}</p>
-        <div class="course-progress">
-          <div class="progress-bar"><div class="progress-fill" style="width:${c.progress}%"></div></div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-  el.coursesGrid.querySelectorAll('.course-full-card').forEach(card => {
-    card.addEventListener('click', () => openCourseDetail(card.dataset.course));
-  });
 }
 
 function openCourseDetail(courseId) {
@@ -655,8 +633,12 @@ function setAuthMode(mode) {
 function showAuthenticatedApp(user) {
   const metadata = user.user_metadata || {};
   const accountId = metadata.student_id || user.email || 'Student';
-  const isTeacher = user.app_metadata?.role === 'teacher' || metadata.role === 'teacher';
-  const role = isTeacher ? 'Teacher' : 'Student';
+  const accountRole = String(user.app_metadata?.role || metadata.role || 'student')
+    .toLowerCase();
+  const isCourseManager = ['teacher', 'admin', 'administrator'].includes(accountRole);
+  const role = accountRole === 'admin' || accountRole === 'administrator'
+    ? 'Administrator'
+    : isCourseManager ? 'Teacher' : 'Student';
 
   state.user = {
     id: user.id,
@@ -664,7 +646,7 @@ function showAuthenticatedApp(user) {
     fullName: metadata.full_name || metadata.name || '',
     studentId: metadata.student_id || '',
     userMetadata: metadata,
-    role: role.toLowerCase(),
+    role: accountRole,
     email: user.email
   };
   const displayName = state.user.fullName || accountId;
@@ -675,8 +657,11 @@ function showAuthenticatedApp(user) {
   el.profileFullName.value = state.user.fullName;
   el.profileStudentId.value = state.user.studentId;
   el.profileEmail.textContent = state.user.email;
-  el.loginRole.value = state.user.role;
-  el.teacherToolsNav?.classList.toggle('hidden', !isTeacher);
+  el.loginRole.value = isCourseManager ? 'teacher' : 'student';
+  el.teacherToolsNav?.classList.toggle('hidden', !isCourseManager);
+  document.querySelectorAll('[data-open-course-dialog]').forEach(button => {
+    button.classList.toggle('hidden', isCourseManager);
+  });
   if (el.postCourse) {
     el.postCourse.innerHTML = '<option value="">All courses</option>' +
       state.courses.map(course =>
@@ -688,15 +673,14 @@ function showAuthenticatedApp(user) {
 
   renderDashboardDate();
   renderStats();
-  renderDashboardCourses();
   renderDeadlines();
-  renderCourses();
   renderAssignments();
   renderGrades();
   renderNotifications();
   loadClassPosts();
   startClassPostNotifications();
   loadMySubmissions();
+  loadProfileCourses();
   showToast(`Welcome, ${displayName}!`);
 }
 
@@ -1272,7 +1256,6 @@ document.querySelectorAll('[data-view]').forEach(btn => {
   }
 });
 
-el.courseSearch.addEventListener('input', (e) => renderCourses(e.target.value));
 el.assignmentFilter.addEventListener('change', (e) => renderAssignments(e.target.value));
 updatePostKindFields();
 
@@ -1446,4 +1429,335 @@ document.getElementById('moduleForm')?.addEventListener('submit', async (e) => {
   e.target.reset();
   showToast('Module added');
   loadAdmin();
+});
+
+// Function to load profile data from Supabase into the form
+async function loadUserProfile() {
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return;
+
+    // Fetch user profile data (make sure your table has grade_level column)
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('full_name, student_id, grade_level')
+      .eq('id', user.id)
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      document.getElementById('profileFullName').value = data.full_name || '';
+      document.getElementById('profileStudentId').value = data.student_id || '';
+      document.getElementById('profileGradeLevel').value = data.grade_level || '';
+    }
+  } catch (err) {
+    console.error('Error loading profile:', err.message);
+  }
+}
+
+// Function to save profile data when the form is submitted
+async function saveUserProfile(event) {
+  event.preventDefault();
+
+  const fullName = document.getElementById('profileFullName').value;
+  const studentId = document.getElementById('profileStudentId').value;
+  const gradeLevel = document.getElementById('profileGradeLevel').value;
+
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabaseClient
+      .from('profiles')
+      .update({
+        full_name: fullName,
+        student_id: studentId,
+        grade_level: gradeLevel,
+        updated_at: new Date()
+      })
+      .eq('id', user.id);
+
+    if (error) throw error;
+
+    alert('Profile updated successfully!');
+  } catch (err) {
+    console.error('Error saving profile:', err.message);
+    alert('Failed to update profile. Please try again.');
+  }
+}
+
+// Attach listener to the form submission
+document.getElementById('profileForm')?.addEventListener('submit', saveUserProfile);
+
+// Load profile when the page content is fully loaded
+window.addEventListener('DOMContentLoaded', loadUserProfile);
+
+// === ENROLLED COURSES ===
+async function loadProfileCourses() {
+  const courseLists = [
+    document.getElementById('dashboardEnrolledCourses'),
+    document.getElementById('profileCoursesList'),
+    document.getElementById('myCoursesEnrolledList')
+  ].filter(Boolean);
+  if (!courseLists.length) return;
+
+  const knownCourses = state.courses.map(course => ({
+    course_name: course.name,
+    instructor: course.instructor,
+    progress: course.progress
+  }));
+  courseLists.forEach(list => {
+    list.replaceChildren();
+    const loading = document.createElement('li');
+    loading.textContent = 'Loading enrolled courses...';
+    list.appendChild(loading);
+  });
+
+  try {
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError) throw userError;
+    if (!user) {
+      state.enrolledCourses = knownCourses;
+      renderEnrolledCourses(courseLists, knownCourses);
+      return;
+    }
+
+    const { data: courses, error } = await supabaseClient
+      .from('user_courses')
+      .select('course_name, instructor, progress')
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    state.enrolledCourses = mergeEnrolledCourses(knownCourses, courses || []);
+    renderEnrolledCourses(courseLists, state.enrolledCourses);
+  } catch (error) {
+    console.error('Unable to load enrolled courses:', error);
+    state.enrolledCourses = knownCourses;
+    renderEnrolledCourses(courseLists, knownCourses);
+    showToast('Could not load saved enrollments. Showing your existing courses.');
+  }
+}
+
+function mergeEnrolledCourses(courses, additionalCourses) {
+  const merged = [...courses];
+  const knownNames = new Set(
+    merged.map(course => String(course.course_name || '').trim().toLowerCase())
+  );
+  additionalCourses.forEach(course => {
+    const name = String(course.course_name || '').trim();
+    const normalizedName = name.toLowerCase();
+    if (!name || knownNames.has(normalizedName)) return;
+    knownNames.add(normalizedName);
+    merged.push(course);
+  });
+  return merged;
+}
+
+function renderEnrolledCourses(courseLists, courses) {
+  courseLists.forEach(list => {
+    list.replaceChildren();
+    if (!courses.length) {
+      const empty = document.createElement('li');
+      empty.className = 'empty-state enrolled-course-empty';
+      empty.textContent = 'No courses enrolled yet.';
+      list.appendChild(empty);
+      return;
+    }
+
+    courses.forEach(course => {
+      const item = document.createElement('li');
+      item.className = 'enrolled-course-item';
+
+      const details = document.createElement('div');
+      const courseName = course.course_name || 'Untitled course';
+      const matchingCourse = state.courses.find(knownCourse =>
+        knownCourse.name.trim().toLowerCase() === courseName.trim().toLowerCase()
+      );
+      if (matchingCourse) {
+        const name = document.createElement('button');
+        name.type = 'button';
+        name.className = 'enrolled-course-link';
+        name.textContent = courseName;
+        name.addEventListener('click', () => openCourseDetail(matchingCourse.id));
+        details.appendChild(name);
+      } else {
+        const name = document.createElement('strong');
+        name.textContent = courseName;
+        details.appendChild(name);
+      }
+      const instructor = document.createElement('span');
+      instructor.className = 'enrolled-course-instructor';
+      instructor.textContent = `Instructor: ${course.instructor || 'N/A'}`;
+      details.appendChild(instructor);
+
+      const progress = document.createElement('span');
+      progress.className = 'enrolled-course-progress';
+      progress.textContent = `${course.progress ?? 0}% Complete`;
+      item.append(details, progress);
+      list.appendChild(item);
+    });
+  });
+}
+
+function openCourseEnrollmentDialog() {
+  el.courseEnrollmentForm.reset();
+  el.courseEnrollmentMessage.textContent = '';
+  el.courseEnrollmentMessage.className = 'auth-message';
+  el.courseEnrollmentDialog.showModal();
+  el.courseShareCode.focus();
+}
+
+async function handleAddCourse(event) {
+  event.preventDefault();
+  const shareCode = el.courseShareCode.value.trim().toUpperCase();
+  if (!shareCode) return;
+
+  try {
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError) throw userError;
+    if (!user) {
+      alert('Please log in first.');
+      return;
+    }
+
+    const { data, error } = await supabaseClient.rpc(
+      'enroll_student_in_course',
+      { p_share_code: shareCode }
+    );
+
+    if (error) throw error;
+
+    const enrolledCourse = Array.isArray(data) ? data[0] : data;
+    if (!enrolledCourse?.course_name) {
+      throw new Error('The course code was not recognized.');
+    }
+
+    await loadProfileCourses();
+    el.courseEnrollmentDialog.close();
+    showToast(`Enrolled in ${enrolledCourse.course_name}.`);
+
+  } catch (error) {
+    console.error('Unable to add course:', error);
+    el.courseEnrollmentMessage.textContent =
+      error.code === '22023'
+        ? 'That course code is invalid. Check with your teacher and try again.'
+        : `Could not enroll in this course: ${error.message}`;
+    el.courseEnrollmentMessage.className = 'auth-message error';
+  }
+}
+
+async function loadTeacherCourses() {
+  if (!isCourseManager()) return;
+
+  el.teacherCoursesList.textContent = 'Loading published courses...';
+  try {
+    const { data, error } = await supabaseClient
+      .from('course_offerings')
+      .select('course_name, instructor, share_code, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    el.teacherCoursesList.replaceChildren();
+    if (!data?.length) {
+      el.teacherCoursesList.textContent = 'No courses have been published yet.';
+      return;
+    }
+
+    data.forEach(course => {
+      const item = document.createElement('article');
+      item.className = 'teacher-course-item';
+      const details = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = course.course_name;
+      const instructor = document.createElement('span');
+      instructor.className = 'enrolled-course-instructor';
+      instructor.textContent = `Instructor: ${course.instructor || 'TBA'}`;
+      details.append(name, instructor);
+
+      const codeArea = document.createElement('div');
+      codeArea.className = 'teacher-course-code';
+      const code = document.createElement('code');
+      code.textContent = course.share_code;
+      code.setAttribute('aria-label', `Share code: ${course.share_code}`);
+      const copyButton = document.createElement('button');
+      copyButton.type = 'button';
+      copyButton.className = 'secondary-btn';
+      copyButton.textContent = 'Copy code';
+      copyButton.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(course.share_code);
+          showToast(`Copied course code ${course.share_code}.`);
+        } catch (error) {
+          console.error('Unable to copy the course code:', error);
+          showToast('Could not copy the code. Select and copy it manually.');
+        }
+      });
+      codeArea.append(code, copyButton);
+      item.append(details, codeArea);
+      el.teacherCoursesList.appendChild(item);
+    });
+  } catch (error) {
+    console.error('Unable to load published courses:', error);
+    el.teacherCoursesList.textContent =
+      'Could not load published courses. Check the course setup and try again.';
+  }
+}
+
+async function handleCreateTeacherCourse(event) {
+  event.preventDefault();
+  if (!isCourseManager()) {
+    el.teacherCourseMessage.textContent =
+      'Only teachers and administrators can publish courses.';
+    el.teacherCourseMessage.className = 'auth-message error';
+    return;
+  }
+
+  const courseName = el.teacherCourseName.value.trim();
+  const instructor = el.teacherCourseInstructor.value.trim();
+  if (!courseName) return;
+
+  el.createTeacherCourseButton.disabled = true;
+  el.teacherCourseMessage.textContent = 'Creating course...';
+  el.teacherCourseMessage.className = 'auth-message';
+  try {
+    const { data, error } = await supabaseClient.rpc('create_course_offering', {
+      p_course_name: courseName,
+      p_instructor: instructor || state.user.fullName || 'TBA'
+    });
+    if (error) throw error;
+
+    const offering = Array.isArray(data) ? data[0] : data;
+    if (!offering?.share_code) {
+      throw new Error('The course was created without a share code.');
+    }
+
+    el.teacherCourseForm.reset();
+    el.teacherCourseMessage.textContent =
+      `Course published. Share code: ${offering.share_code}`;
+    el.teacherCourseMessage.className = 'auth-message success';
+    await loadTeacherCourses();
+  } catch (error) {
+    console.error('Unable to publish course:', error);
+    el.teacherCourseMessage.textContent =
+      `Could not publish course: ${error.message}`;
+    el.teacherCourseMessage.className = 'auth-message error';
+  } finally {
+    el.createTeacherCourseButton.disabled = false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-open-course-dialog]').forEach(button => {
+    button.addEventListener('click', openCourseEnrollmentDialog);
+  });
+  el.courseEnrollmentForm.addEventListener('submit', handleAddCourse);
+  el.closeCourseEnrollmentDialog.addEventListener('click', () =>
+    el.courseEnrollmentDialog.close()
+  );
+  el.cancelCourseEnrollment.addEventListener('click', () =>
+    el.courseEnrollmentDialog.close()
+  );
+  el.teacherCourseForm.addEventListener('submit', handleCreateTeacherCourse);
 });

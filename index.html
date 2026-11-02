@@ -150,11 +150,11 @@
           <div class="stats-grid">
             <article class="stat-card">
               <div class="stat-top">
-                <span>Enrolled courses</span>
-                <span class="stat-icon purple">▤</span>
+                <span>Submitted assignments</span>
+                <span class="stat-icon purple">✓</span>
               </div>
-              <strong id="statCourses">4</strong>
-              <small><span class="positive">●</span> Your active learning space</small>
+              <strong id="statSubmitted">0</strong>
+              <small>Work sent for review</small>
             </article>
             <article class="stat-card">
               <div class="stat-top">
@@ -182,7 +182,7 @@
             </article>
           </div>
           <div class="dashboard-grid">
-            <section class="panel course-panel">
+            <section class="panel learning-panel">
               <div class="panel-heading">
                 <div>
                   <h2>Continue learning</h2>
@@ -192,7 +192,8 @@
                   View all →
                 </button>
               </div>
-              <div id="dashboardCourses" class="course-list"></div>
+              <ul id="dashboardEnrolledCourses"
+                class="enrolled-courses-list dashboard-enrolled-courses"></ul>
             </section>
             <section class="panel deadline-panel">
               <div class="panel-heading">
@@ -229,16 +230,18 @@
               <p class="eyebrow">YOUR CLASSROOM</p>
               <h1>My Courses</h1>
               <p class="muted">
-                Explore course content and keep your learning on track.
+                View your enrolled courses and keep your learning on track.
               </p>
             </div>
-            <div class="search-wrap">
-              <span>⌕</span>
-              <input id="courseSearch" placeholder="Search courses..."
-                aria-label="Search courses">
-            </div>
           </div>
-          <div id="coursesGrid" class="courses-grid"></div>
+          <section class="panel enrolled-courses-panel">
+            <div class="enrolled-courses-heading">
+              <h2>Enrolled Courses</h2>
+              <button type="button" class="primary-btn"
+                data-open-course-dialog>Enroll with a course code</button>
+            </div>
+            <ul id="myCoursesEnrolledList" class="enrolled-courses-list"></ul>
+          </section>
         </section>
         <!-- ASSIGNMENTS -->
         <section id="view-assignments" class="view hidden">
@@ -347,9 +350,29 @@
             <div>
               <p class="eyebrow">CLASSROOM UPDATES</p>
               <h1>Teacher tools</h1>
-              <p class="muted">Publish announcements and activities for your students.</p>
+              <p class="muted">Create courses, share enrollment codes, and publish class updates.</p>
             </div>
           </div>
+          <section class="panel teacher-courses-panel">
+            <h2>Create a course</h2>
+            <p class="muted">Students can enroll only with a code for a course published here.</p>
+            <form id="teacherCourseForm" class="teacher-post-form">
+              <label for="teacherCourseName">Course name</label>
+              <input id="teacherCourseName" name="courseName" type="text"
+                maxlength="120" required>
+              <label for="teacherCourseInstructor">Instructor</label>
+              <input id="teacherCourseInstructor" name="instructor" type="text"
+                maxlength="120" placeholder="Optional">
+              <p id="teacherCourseMessage" class="auth-message" role="status"
+                aria-live="polite"></p>
+              <button id="createTeacherCourseButton" class="primary-btn"
+                type="submit">Create course and code</button>
+            </form>
+            <div class="teacher-courses-list">
+              <h3>Published courses and share codes</h3>
+              <div id="teacherCoursesList" aria-live="polite"></div>
+            </div>
+          </section>
           <form id="teacherPostForm" class="panel teacher-post-form">
             <label for="postKind">Post type</label>
             <select id="postKind" name="kind">
@@ -400,6 +423,10 @@
               <label for="profileFullName">Full name</label>
               <input id="profileFullName" name="fullName" type="text"
                 maxlength="80" autocomplete="name" required>
+                <div id="profileGradeField">
+                <label for="profileGradeLevel">Grade / Year Level</label>
+                <input id="profileGradeLevel" name="gradeLevel" type="text" maxLength="80" placeholder="e.g., Grade 11 / 1st Year">
+              </div>
               <div id="profileStudentIdField">
                 <label for="profileStudentId">Student ID</label>
                 <input id="profileStudentId" name="studentId" type="text"
@@ -419,7 +446,16 @@
               </div>
             </form>
           </div>
+          <div class="panel enrolled-courses-panel">
+            <div class="enrolled-courses-heading">
+              <h2>Enrolled Courses</h2>
+              <button type="button" class="primary-btn"
+                data-open-course-dialog>Enroll with a course code</button>
+            </div>
+            <ul id="profileCoursesList" class="enrolled-courses-list"></ul>
+          </div>
         </section>
+
         <!-- SETTINGS -->
         <section id="view-settings" class="view hidden">
           <div class="page-heading">
@@ -539,6 +575,30 @@
         <button id="submitAssignmentButton" type="submit" class="primary-btn">
           Submit assignment →
         </button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="courseEnrollmentDialog" class="assignment-dialog">
+    <form id="courseEnrollmentForm">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">MY COURSES</p>
+          <h2>Enroll with a course code</h2>
+        </div>
+        <button type="button" id="closeCourseEnrollmentDialog"
+          class="icon-btn" aria-label="Close">×</button>
+      </div>
+      <p class="muted">Ask your teacher or administrator for the code to a published course.</p>
+      <label for="courseShareCode">Course code</label>
+      <input id="courseShareCode" name="shareCode" type="text"
+        maxlength="16" autocomplete="off" autocapitalize="characters"
+        placeholder="Enter the code shared by your teacher" required>
+      <p id="courseEnrollmentMessage" class="auth-message" role="status"
+        aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary-btn"
+          id="cancelCourseEnrollment">Cancel</button>
+        <button type="submit" class="primary-btn">Enroll</button>
       </div>
     </form>
   </dialog>
