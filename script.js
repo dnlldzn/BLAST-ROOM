@@ -25,6 +25,7 @@ const state = {
     { id: 'n2', message: 'Grade updated: OLMATH – 92%', time: '1 day ago', read: false },
     { id: 'n3', message: 'Class reminder: Database lecture tomorrow 9AM', time: '2 days ago', read: true }
   ],
+  classPosts: [],
   grades: {
     overall: 88.5, letter: 'B+',
     courses: [
@@ -42,6 +43,7 @@ const el = {
   loginScreen: document.getElementById('loginScreen'),
   app: document.getElementById('app'),
   loginForm: document.getElementById('loginForm'),
+  loginRole: document.getElementById('loginRole'),
   studentIdField: document.getElementById('studentIdField'),
   loginStudentId: document.getElementById('loginStudentId'),
   loginEmail: document.getElementById('loginEmail'),
@@ -50,6 +52,18 @@ const el = {
   authMessage: document.getElementById('authMessage'),
   authModeToggle: document.getElementById('authModeToggle'),
   authSwitchPrompt: document.getElementById('authSwitchPrompt'),
+  teacherToolsNav: document.getElementById('teacherToolsNav'),
+  teacherPostForm: document.getElementById('teacherPostForm'),
+  postKind: document.getElementById('postKind'),
+  postTitle: document.getElementById('postTitle'),
+  postCourseField: document.getElementById('postCourseField'),
+  postCourse: document.getElementById('postCourse'),
+  postDueDateField: document.getElementById('postDueDateField'),
+  postDueDate: document.getElementById('postDueDate'),
+  postContent: document.getElementById('postContent'),
+  publishPostButton: document.getElementById('publishPostButton'),
+  teacherPostMessage: document.getElementById('teacherPostMessage'),
+  teacherPostsList: document.getElementById('teacherPostsList'),
   sidebar: document.getElementById('sidebar'),
   mobileMenu: document.getElementById('mobileMenu'),
   pageCrumb: document.getElementById('pageCrumb'),
@@ -64,8 +78,7 @@ const el = {
     assignments: document.getElementById('view-assignments'),
     grades: document.getElementById('view-grades'),
     notifications: document.getElementById('view-notifications'),
-    courseDetail: document.getElementById('view-course-detail'),
-    admin: document.getElementById('view-admin')
+    courseDetail: document.getElementById('view-course-detail')
   },
   navItems: document.querySelectorAll('.nav-item[data-view]'),
   statCourses: document.getElementById('statCourses'),
@@ -131,6 +144,30 @@ function getCourseName(id) {
   return c ? c.name : id;
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
+}
+
+function getAssignments() {
+  const activities = state.classPosts
+    .filter(post => post.kind === 'activity')
+    .map(post => ({
+      id: `post-${post.id}`,
+      title: post.title,
+      course: post.course_id || 'All courses',
+      dueDate: post.due_date || new Date(post.created_at),
+      status: post.status || 'pending',
+      description: post.content
+    }));
+  return [...state.assignments, ...activities];
+}
+
 function formatDate(d) {
   const date = new Date(d);
   const opts = { month: 'short', day: 'numeric' };
@@ -144,12 +181,24 @@ function getDaysRemaining(d) {
 }
 
 function updateNotificationBadge() {
-  const unread = state.notifications.filter(n => !n.read).length;
+  const unread = [...state.notifications, ...getAnnouncementNotifications()]
+    .filter(n => !n.read).length;
   el.notificationDot.style.display = unread > 0 ? 'block' : 'none';
 }
 
+function getAnnouncementNotifications() {
+  return state.classPosts
+    .filter(post => post.kind === 'announcement')
+    .map(post => ({
+      id: `post-${post.id}`,
+      message: `${post.title}: ${post.content}`,
+      time: formatDate(post.created_at),
+      read: Boolean(post.read)
+    }));
+}
+
 function updateAssignmentCount() {
-  const pending = state.assignments.filter(a => a.status === 'pending').length;
+  const pending = getAssignments().filter(a => a.status === 'pending').length;
   el.assignmentCount.textContent = pending;
   el.statPending.textContent = pending;
 }
@@ -180,7 +229,7 @@ function renderDashboardCourses() {
 }
 
 function renderDeadlines() {
-  const upcoming = state.assignments
+  const upcoming = getAssignments()
     .filter(a => a.status === 'pending')
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   el.dashboardDeadlines.innerHTML = upcoming.map(a => {
@@ -188,8 +237,8 @@ function renderDeadlines() {
     const cls = days <= 3 ? 'urgent' : 'normal';
     return `
       <div class="deadline-item ${cls}">
-        <strong>${a.title}</strong>
-        <p class="muted">${getCourseName(a.course)} · Due ${formatDate(a.dueDate)} (${days} days left)</p>
+        <strong>${escapeHtml(a.title)}</strong>
+          <p class="muted">${escapeHtml(getCourseName(a.course))} · Due ${formatDate(a.dueDate)} (${days} days left)</p>
       </div>
     `;
   }).join('');
@@ -221,7 +270,9 @@ function renderCourses(search = '') {
 function openCourseDetail(courseId) {
   const c = state.courses.find(x => x.id === courseId);
   if (!c) return;
-  const courseAssignments = state.assignments.filter(a => a.course === courseId);
+  const courseAssignments = getAssignments().filter(a =>
+    a.course === courseId || a.course === 'All courses'
+  );
   el.courseDetailContent.innerHTML = `
     <h2 style="font-size:1.5rem; font-weight:700; margin-bottom:0.5rem;">${c.name}</h2>
     <p class="muted" style="margin-bottom:1.5rem;">Instructor: ${c.instructor}</p>
@@ -238,7 +289,7 @@ function openCourseDetail(courseId) {
         <div class="module-item" style="background:white; border-radius:8px; border:none; box-shadow:var(--shadow);">
           <span class="module-status ${a.status === 'pending' ? 'pending' : ''}">${a.status === 'pending' ? '⏳' : '✓'}</span>
           <div>
-            <strong>${a.title}</strong>
+            <strong>${escapeHtml(a.title)}</strong>
             <p class="muted" style="font-size:0.85rem;">Due: ${formatDate(a.dueDate)}</p>
           </div>
           <button class="primary-btn" style="margin-left:auto; padding:0.4rem 0.8rem; font-size:0.85rem;" data-assignment="${a.id}">
@@ -256,13 +307,13 @@ function openCourseDetail(courseId) {
 }
 
 function renderAssignments(filter = 'all') {
-  let list = state.assignments;
+  let list = getAssignments();
   if (filter === 'pending') list = list.filter(a => a.status === 'pending');
   if (filter === 'submitted') list = list.filter(a => a.status === 'submitted');
   el.assignmentsTable.innerHTML = list.map(a => `
     <tr>
-      <td><strong>${a.title}</strong></td>
-      <td>${getCourseName(a.course)}</td>
+      <td><strong>${escapeHtml(a.title)}</strong></td>
+      <td>${escapeHtml(getCourseName(a.course))}</td>
       <td>${formatDate(a.dueDate)}</td>
       <td class="status-${a.status}">${a.status.charAt(0).toUpperCase() + a.status.slice(1)}</td>
       <td><button class="text-button" data-assignment="${a.id}">${a.status === 'pending' ? 'Submit →' : 'View'}</button></td>
@@ -274,7 +325,7 @@ function renderAssignments(filter = 'all') {
 }
 
 function openAssignmentDialog(assignmentId) {
-  const a = state.assignments.find(x => x.id === assignmentId);
+  const a = getAssignments().find(item => item.id === assignmentId);
   if (!a) return;
   el.dialogTitle.textContent = a.title;
   el.dialogDescription.textContent = a.description;
@@ -307,10 +358,11 @@ function renderGrades() {
 
 function renderNotifications() {
   updateNotificationBadge();
-  el.notificationsList.innerHTML = state.notifications.map(n => `
+  const notifications = [...state.notifications, ...getAnnouncementNotifications()];
+  el.notificationsList.innerHTML = notifications.map(n => `
     <div class="notification-item ${!n.read ? 'unread' : ''}" data-id="${n.id}">
-      <p>${n.message}</p>
-      <small class="muted">${n.time}</small>
+      <p>${escapeHtml(n.message)}</p>
+      <small class="muted">${escapeHtml(n.time)}</small>
     </div>
   `).join('');
 }
@@ -463,36 +515,37 @@ function setAuthMessage(message, type = '') {
 }
 
 function setAuthMode(mode) {
-  authMode = mode;
-  const isSignup = mode === 'signup';
+  const isSignup = mode === 'signup' && el.loginRole.value === 'student';
+  authMode = isSignup ? 'signup' : 'login';
   el.studentIdField.classList.toggle('hidden', !isSignup);
   el.loginStudentId.required = isSignup;
   el.loginStudentId.autocomplete = isSignup ? 'username' : 'off';
   el.loginPassword.autocomplete = isSignup ? 'new-password' : 'current-password';
   el.loginPassword.minLength = isSignup ? 6 : 0;
-  el.authSubmit.innerHTML = isSignup
-    ? 'Create student account <span>→</span>'
-    : 'Log in to Blastoise Room <span>→</span>';
+  el.authSubmit.innerHTML = isSignup ? 'Create student account <span>→</span>'
+    : el.loginRole.value === 'teacher' ? 'Teacher log in <span>→</span>'
+      : 'Log in to Blastoise Room <span>→</span>';
+  el.authSwitchPrompt.closest('.auth-switch').classList.toggle(
+    'hidden',
+    el.loginRole.value === 'teacher'
+  );
   el.authModeToggle.textContent = isSignup ? 'Log in' : 'Create an account';
   el.authSwitchPrompt.textContent = isSignup ? 'Already have an account?' : 'New student?';
   setAuthMessage('');
 }
 
-async function showAuthenticatedApp(user) {
-  // Role comes from the database (profiles table), never from the browser.
-  const { data: profile } = await supabaseClient
-    .from('profiles').select('role, student_id').eq('id', user.id).maybeSingle();
-  const isStaff = ['admin', 'teacher'].includes(profile?.role);
-  const accountId = profile?.student_id || user.email || 'Student';
-  const role = profile?.role === 'admin' ? 'Admin' : profile?.role === 'teacher' ? 'Teacher' : 'Student';
+function showAuthenticatedApp(user) {
+  const metadata = user.user_metadata || {};
+  const accountId = metadata.student_id || user.email || 'Student';
+  const role = metadata.role === 'teacher' ? 'Teacher' : 'Student';
 
-
-  state.user = { accountId, role: role.toLowerCase(), email: user.email, isStaff };
-  document.querySelectorAll('.admin-only').forEach(n => n.classList.toggle('hidden', !isStaff));
+  state.user = { accountId, role: role.toLowerCase(), email: user.email };
   el.welcomeName.textContent = accountId;
   el.userNameTop.textContent = accountId;
   el.userRoleTop.textContent = `${role} account`;
   el.userAvatar.textContent = accountId.slice(0, 2).toUpperCase();
+  el.loginRole.value = state.user.role;
+  el.teacherToolsNav.classList.toggle('hidden', !isTeacher);
   el.loginScreen.classList.add('hidden');
   el.app.classList.remove('hidden');
 
@@ -503,13 +556,121 @@ async function showAuthenticatedApp(user) {
   renderAssignments();
   renderGrades();
   renderNotifications();
+  loadClassPosts();
   showToast(`Welcome, ${accountId}!`);
+}
+
+function updatePostKindFields() {
+  const isActivity = el.postKind.value === 'activity';
+  el.postCourseField.classList.toggle('hidden', !isActivity);
+  el.postDueDateField.classList.toggle('hidden', !isActivity);
+  el.postCourse.required = false;
+  el.postDueDate.required = isActivity;
+}
+
+function renderTeacherPosts() {
+  if (!state.classPosts.length) {
+    el.teacherPostsList.innerHTML = '<p class="muted">No class posts have been published yet.</p>';
+    return;
+  }
+  el.teacherPostsList.innerHTML = state.classPosts.map(post => `
+    <article class="teacher-post-item">
+      <span class="course-tag">${post.kind === 'activity' ? 'Activity' : 'Announcement'}</span>
+      <strong>${escapeHtml(post.title)}</strong>
+      <p>${escapeHtml(post.content)}</p>
+      <small class="muted">${escapeHtml(post.course_id ? getCourseName(post.course_id) : 'All courses')}${
+    post.due_date ? ` · Due ${escapeHtml(formatDate(post.due_date))}` : ''
+  } · ${escapeHtml(post.created_at ? formatDate(post.created_at) : 'Recently')}</small>
+    </article>
+  `).join('');
+}
+
+async function loadClassPosts() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('class_posts')
+      .select('id, kind, title, content, course_id, due_date, author_id, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    state.classPosts = data || [];
+    renderAssignments(el.assignmentFilter.value);
+    renderDeadlines();
+    renderNotifications();
+    renderTeacherPosts();
+    updateAssignmentCount();
+  } catch (error) {
+    console.error('Unable to load class posts:', error);
+    showToast(getClassPostErrorMessage(error));
+  }
+}
+
+function getClassPostErrorMessage(error) {
+  if (error && error.code === 'PGRST205') {
+    return 'Class posts are not set up yet. Run supabase_setup.sql in the Supabase SQL Editor.';
+  }
+  return `Could not access class posts: ${error?.message || 'Please try again.'}`;
+}
+
+async function publishClassPost(event) {
+  event.preventDefault();
+  if (state.user?.role !== 'teacher') {
+    setTeacherPostMessage('Only signed-in teachers can publish class posts.', 'error');
+    return;
+  }
+
+  const kind = el.postKind.value;
+  const title = el.postTitle.value.trim();
+  const content = el.postContent.value.trim();
+  if (!title || !content || (kind === 'activity' && !el.postDueDate.value)) {
+    setTeacherPostMessage('Complete the title, instructions, and activity due date.', 'error');
+    return;
+  }
+
+  el.publishPostButton.disabled = true;
+  setTeacherPostMessage('Publishing…');
+  try {
+    const { data, error } = await supabaseClient
+      .from('class_posts')
+      .insert({
+        kind,
+        title,
+        content,
+        course_id: kind === 'activity' ? (el.postCourse.value || null) : null,
+        due_date: kind === 'activity' ? el.postDueDate.value : null,
+        author_id: state.user.id
+      })
+      .select('id, kind, title, content, course_id, due_date, author_id, created_at')
+      .single();
+    if (error) throw error;
+
+    state.classPosts.unshift(data);
+    renderAssignments(el.assignmentFilter.value);
+    renderDeadlines();
+    renderNotifications();
+    renderTeacherPosts();
+    updateAssignmentCount();
+    el.teacherPostForm.reset();
+    updatePostKindFields();
+    setTeacherPostMessage('Your post has been published.', 'success');
+  } catch (error) {
+    console.error('Unable to publish class post:', error);
+    setTeacherPostMessage(getClassPostErrorMessage(error), 'error');
+  } finally {
+    el.publishPostButton.disabled = false;
+  }
+}
+
+function setTeacherPostMessage(message, type = '') {
+  el.teacherPostMessage.textContent = message;
+  el.teacherPostMessage.className = `auth-message${type ? ` ${type}` : ''}`;
 }
 
 async function handleLogin(e) {
   e.preventDefault();
   const email = el.loginEmail.value.trim();
   const password = el.loginPassword.value;
+  const expectedRole = el.loginRole.value;
   const studentId = el.loginStudentId.value.trim();
   if (authMode === 'signup' && !studentId) {
     setAuthMessage('Enter your student ID.', 'error');
@@ -519,6 +680,7 @@ async function handleLogin(e) {
 
   el.authSubmit.disabled = true;
   el.authModeToggle.disabled = true;
+  el.loginRole.disabled = true;
   setAuthMessage(authMode === 'signup' ? 'Creating your account…' : 'Signing in…');
 
   try {
@@ -552,12 +714,19 @@ async function handleLogin(e) {
       password
     });
     if (error) throw error;
+    const actualRole = data.user.app_metadata?.role === 'teacher' ? 'teacher' : 'student';
+    if (actualRole !== expectedRole) {
+      const { error: signOutError } = await supabaseClient.auth.signOut();
+      if (signOutError) throw signOutError;
+      throw new Error(`This account is not registered as a ${expectedRole}.`);
+    }
     showAuthenticatedApp(data.user);
   } catch (error) {
     setAuthMessage(error.message || 'Authentication failed. Please try again.', 'error');
   } finally {
     el.authSubmit.disabled = false;
     el.authModeToggle.disabled = false;
+    el.loginRole.disabled = false;
   }
 }
 
@@ -570,10 +739,13 @@ async function handleLogout() {
     return;
   }
   state.user = null;
+  state.classPosts = [];
+  el.teacherToolsNav.classList.add('hidden');
   el.loginScreen.classList.remove('hidden');
   el.app.classList.add('hidden');
   showView('dashboard');
   el.loginForm.reset();
+  el.loginRole.value = 'student';
   setAuthMode('login');
 }
 
@@ -582,6 +754,9 @@ el.loginForm.addEventListener('submit', handleLogin);
 el.authModeToggle.addEventListener('click', () => {
   setAuthMode(authMode === 'login' ? 'signup' : 'login');
 });
+el.loginRole.addEventListener('change', () => setAuthMode('login'));
+el.postKind.addEventListener('change', updatePostKindFields);
+el.teacherPostForm.addEventListener('submit', publishClassPost);
 el.logoutBtn.addEventListener('click', handleLogout);
 el.mobileMenu.addEventListener('click', () => el.sidebar.classList.toggle('open'));
 el.backToCourses.addEventListener('click', () => showView('courses'));
@@ -597,6 +772,9 @@ el.assignmentFilter.addEventListener('change', (e) => renderAssignments(e.target
 
 el.markAllRead.addEventListener('click', () => {
   state.notifications.forEach(n => n.read = true);
+  state.classPosts.forEach(post => {
+    if (post.kind === 'announcement') post.read = true;
+  });
   renderNotifications();
   showToast('All marked as read ✓');
 });
@@ -608,14 +786,11 @@ el.assignmentForm.addEventListener('submit', async (e) => {
   const id = el.assignmentDialog.dataset.id;
   const a = state.assignments.find(x => x.id === id);
   if (a) {
-    const { error } = await supabaseClient.from('submissions')
-      .insert({ assignment_id: id, answer: el.assignmentAnswer.value });
-    if (error) { showToast(`Could not submit: ${error.message}`); return; }
     a.status = 'submitted';
     renderAssignments(el.assignmentFilter.value);
     renderDeadlines();
     updateAssignmentCount();
-    showToast(`Submitted: ${a.title} ✅`);
+    showToast(`Submitted: ${item.title} ✅`);
   }
   el.assignmentDialog.close();
 });
@@ -653,6 +828,13 @@ async function restoreSession() {
     );
   }
 }
+state.courses.forEach(course => {
+  const option = document.createElement('option');
+  option.value = course.id;
+  option.textContent = course.name;
+  el.postCourse.appendChild(option);
+});
+updatePostKindFields();
 restoreSession();
 // === ADMIN DASHBOARD + MODULE MANAGEMENT ===
 // The checks below only hide things. Real protection is the row-level rules in setup.sql.

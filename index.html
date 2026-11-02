@@ -19,6 +19,11 @@
         Your courses, Modules, assignments, and grades in one place.
       </p>
       <form id="loginForm">
+        <label for="loginRole">I am a</label>
+        <select id="loginRole" name="loginRole">
+          <option value="student">Student</option>
+          <option value="teacher">Teacher</option>
+        </select>
         <div id="studentIdField" class="hidden">
           <label for="loginStudentId">Student ID</label>
           <input id="loginStudentId" name="loginStudentId"
@@ -67,9 +72,6 @@
         <button class="nav-item" data-view="notifications">
           <span>♧</span> Notifications
           <span class="notification-dot"></span>
-        </button>
-        <button class="nav-item admin-only hidden" data-view="admin">
-          <span>⚙</span> Manage
         </button>
       </nav>
       <div class="sidebar-bottom">
@@ -321,35 +323,6 @@
             </button>
           </div>
           <div id="notificationsList" class="panel notifications-list"></div>
-        </section>
-        <!-- ADMIN (only shown to admins) -->
-        <section id="view-admin" class="view hidden">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">ADMINS AND TEACHERS</p>
-              <h1>Staff Dashboard</h1>
-              <p class="muted">Statistics and module management.</p>
-            </div>
-          </div>
-          <div class="stats-grid">
-            <article class="stat-card"><div class="stat-top"><span>Students</span></div><strong id="adminStudents">–</strong></article>
-            <article class="stat-card"><div class="stat-top"><span>Modules</span></div><strong id="adminModuleCount">–</strong></article>
-            <article class="stat-card"><div class="stat-top"><span>Submissions</span></div><strong id="adminSubmissions">–</strong></article>
-          </div>
-          <section class="panel">
-            <h2>Submissions by assignment</h2>
-            <div id="adminSubmissionStats"></div>
-          </section>
-          <section class="panel">
-            <h2>Manage modules</h2>
-            <form id="moduleForm" class="module-form">
-              <select id="moduleCourse" aria-label="Course"></select>
-              <input id="moduleTitle" placeholder="Module title" required>
-              <textarea id="moduleContent" rows="3" placeholder="Module content or notes"></textarea>
-              <button class="primary-btn" type="submit">Add module</button>
-            </form>
-            <div id="adminModules"></div>
-          </section>
         </section>
         <!-- COURSE DETAILS AND MODULES -->
         <section id="view-course-detail" class="view hidden">
