@@ -123,6 +123,12 @@ const el = {
 function showView(viewName) {
   if (viewName === 'admin' && !state.user?.isStaff) return;
   Object.values(el.views).forEach(v => v.classList.add('hidden'));
+  if (el.views) {
+    Object.values(el.views).forEach(v => v?.classList.add('hidden'));
+}
+if (el.navItems) {
+    el.navItems.forEach(n => n?.classList.remove('active'));
+}
   el.views[viewName].classList.remove('hidden');
   el.navItems.forEach(n => n.classList.remove('active'));
   document.querySelectorAll(`[data-view="${viewName}"]`).forEach(n => n.classList.add('active'));
@@ -130,7 +136,7 @@ function showView(viewName) {
     viewName.charAt(0).toUpperCase() + viewName.slice(1);
   state.activeView = viewName;
   if (viewName === 'admin') loadAdmin();
-  if (window.innerWidth < 900) el.sidebar.classList.remove('open');
+ if (window.innerWidth < 900 && el.sidebar) el.sidebar.classList.remove('open');
 }
 
 function showToast(msg) {
