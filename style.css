@@ -784,6 +784,18 @@ textarea:focus-visible {
   gap: 13px;
 }
 
+#dashboardCourses .course-card {
+  padding: 16px 18px;
+}
+
+#dashboardCourses .course-card h3 {
+  margin: 0 0 6px;
+}
+
+#dashboardCourses .course-card p {
+  margin: 0;
+}
+
 .mini-course {
   display: flex;
   align-items: center;
