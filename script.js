@@ -108,7 +108,7 @@ const el = {
 
 // === UTILITY ===
 function showView(viewName) {
-  if (viewName === 'admin' && !state.user?.isAdmin) return;
+  if (viewName === 'admin' && !state.user?.isStaff) return;
   Object.values(el.views).forEach(v => v.classList.add('hidden'));
   el.views[viewName].classList.remove('hidden');
   el.navItems.forEach(n => n.classList.remove('active'));
@@ -482,12 +482,13 @@ async function showAuthenticatedApp(user) {
   // Role comes from the database (profiles table), never from the browser.
   const { data: profile } = await supabaseClient
     .from('profiles').select('role, student_id').eq('id', user.id).maybeSingle();
-  const isAdmin = profile?.role === 'admin';
+  const isStaff = ['admin', 'teacher'].includes(profile?.role);
   const accountId = profile?.student_id || user.email || 'Student';
-  const role = isAdmin ? 'Admin' : 'Student';
+  const role = profile?.role === 'admin' ? 'Admin' : profile?.role === 'teacher' ? 'Teacher' : 'Student';
 
-  state.user = { accountId, role: role.toLowerCase(), email: user.email, isAdmin };
-  document.querySelectorAll('.admin-only').forEach(n => n.classList.toggle('hidden', !isAdmin));
+
+  state.user = { accountId, role: role.toLowerCase(), email: user.email, isStaff };
+  document.querySelectorAll('.admin-only').forEach(n => n.classList.toggle('hidden', !isStaff));
   el.welcomeName.textContent = accountId;
   el.userNameTop.textContent = accountId;
   el.userRoleTop.textContent = `${role} account`;
@@ -673,7 +674,7 @@ async function loadCourseModules(courseId) {
 }
 
 async function loadAdmin() {
-  if (!state.user?.isAdmin) return;
+  if (!state.user?.isStaff) return;
   const countOf = (table, filter) => {
     const q = supabaseClient.from(table).select('*', { count: 'exact', head: true });
     return filter ? filter(q) : q;
